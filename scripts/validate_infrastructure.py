@@ -91,6 +91,8 @@ def _validate_dockerfile(dockerfile: str, errors: list[str]) -> None:
         errors.append("backend/Dockerfile must copy requirements.lock before installing dependencies")
     if not any(re.fullmatch(r"(?:--\S+\s+)*app\s+\.?/?app/?", item) for item in copies):
         errors.append("backend/Dockerfile must copy the application package")
+    if len(copies) != 2:
+        errors.append("backend/Dockerfile must copy only requirements.lock and app/")
 
     runs = [argument for instruction, argument in instructions if instruction == "RUN"]
     expected_install = (
@@ -353,6 +355,24 @@ def _validate_pyproject(pyproject: str, errors: list[str]) -> None:
         return
     if project.get("requires-python") != "==3.12.13":
         errors.append("backend/pyproject.toml requires-python must be exactly 3.12.13")
+    dependencies = project.get("dependencies")
+    runtime_requirements = {
+        _normalize_package_name(item): item
+        for item in dependencies
+        if isinstance(item, str)
+    } if isinstance(dependencies, list) else {}
+    expected_pdf_requirements = {
+        "pymupdf": "PyMuPDF>=1.25,<2.0",
+        "python-multipart": "python-multipart>=0.0.20,<1.0",
+    }
+    if any(
+        runtime_requirements.get(name) != requirement
+        for name, requirement in expected_pdf_requirements.items()
+    ):
+        errors.append(
+            "backend/pyproject.toml runtime dependencies must include the bounded "
+            "PyMuPDF and python-multipart requirements"
+        )
     optional = project.get("optional-dependencies")
     dev = optional.get("dev") if isinstance(optional, dict) else None
     dev_names = {
@@ -395,7 +415,14 @@ def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
             errors.append(f"backend/requirements.lock entry has no SHA-256 hash: {requirement}")
 
     locked_names = {_normalize_package_name(item) for item in requirement_lines}
-    required_runtime_names = {"fastapi", "pydantic-settings", "redis", "uvicorn"}
+    required_runtime_names = {
+        "fastapi",
+        "pydantic-settings",
+        "pymupdf",
+        "python-multipart",
+        "redis",
+        "uvicorn",
+    }
     if not required_runtime_names.issubset(locked_names):
         errors.append("backend/requirements.lock is missing a direct runtime dependency")
     forbidden_dev_names = {

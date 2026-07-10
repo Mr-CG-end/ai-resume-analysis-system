@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import pymupdf
 import yaml
 
 from scripts.validate_infrastructure import validate_repository
@@ -145,6 +146,8 @@ def test_redis_port_is_bound_to_loopback() -> None:
 def test_python_and_production_lock_contract_are_exact() -> None:
     pyproject = (REPOSITORY_ROOT / "backend/pyproject.toml").read_text(encoding="utf-8")
     assert 'requires-python = "==3.12.13"' in pyproject
+    assert '"PyMuPDF>=1.25,<2.0"' in pyproject
+    assert '"python-multipart>=0.0.20,<1.0"' in pyproject
     assert '"pip-tools' in pyproject
     assert '"pytest-cov' in pyproject
 
@@ -153,6 +156,10 @@ def test_python_and_production_lock_contract_are_exact() -> None:
     assert "COPY requirements.lock ./\n" in dockerfile
     assert "RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock\n" in dockerfile
     assert dockerfile.index("RUN python -m pip install") < dockerfile.index("COPY app ./app")
+    assert [line for line in dockerfile.splitlines() if line.startswith("COPY ")] == [
+        "COPY requirements.lock ./",
+        "COPY app ./app",
+    ]
 
     lock_path = REPOSITORY_ROOT / "backend/requirements.lock"
     assert lock_path.is_file()
@@ -179,6 +186,75 @@ def test_python_and_production_lock_contract_are_exact() -> None:
         "ruff==",
     )
     assert not any(line.lower().startswith(dev_only) for line in requirement_lines)
+    locked_names = {
+        re.sub(r"[-_.]+", "-", re.match(r"^[A-Za-z0-9_.-]+", line).group()).lower()
+        for line in requirement_lines
+    }
+    assert {"pymupdf", "python-multipart"}.issubset(locked_names)
+
+
+def test_canonical_pdf_fixtures_are_synthetic_and_structurally_stable() -> None:
+    fixture_directory = REPOSITORY_ROOT / "backend/tests/fixtures"
+    expected_names = {
+        "not-a-pdf.pdf",
+        "resume-corrupted.pdf",
+        "resume-encrypted.pdf",
+        "resume-missing-address.pdf",
+        "resume-repeated-header.pdf",
+        "resume-scan-only.pdf",
+        "resume-valid-3-pages.pdf",
+    }
+    assert {path.name for path in fixture_directory.glob("*.pdf")} == expected_names
+
+    private_metadata = {
+        "title",
+        "author",
+        "subject",
+        "keywords",
+        "creator",
+        "producer",
+        "creationDate",
+        "modDate",
+        "trapped",
+    }
+    with pymupdf.open(fixture_directory / "resume-valid-3-pages.pdf") as document:
+        text = "".join(page.get_text() for page in document)
+        assert document.page_count == 3
+        assert text.index("PAGE ONE") < text.index("PAGE TWO") < text.index("PAGE THREE")
+        assert not any(document.metadata[key] for key in private_metadata)
+
+    with pymupdf.open(fixture_directory / "resume-scan-only.pdf") as document:
+        assert document.page_count == 1
+        assert not "".join(page.get_text() for page in document).strip()
+
+    with pymupdf.open(fixture_directory / "resume-encrypted.pdf") as document:
+        assert document.needs_pass
+        assert document.authenticate("fixture-password")
+        assert not any(document.metadata[key] for key in private_metadata)
+
+    for filename in ("resume-corrupted.pdf", "not-a-pdf.pdf"):
+        with pytest.raises(pymupdf.FileDataError):
+            pymupdf.open(fixture_directory / filename)
+
+
+@pytest.mark.parametrize(
+    ("dependency", "replacement"),
+    [
+        ("PyMuPDF>=1.25,<2.0", "PyMuPDF>=1.24,<2.0"),
+        ("python-multipart>=0.0.20,<1.0", "python-multipart>=0.0.19,<1.0"),
+    ],
+)
+def test_rejects_pdf_runtime_dependency_drift(
+    repository_copy: Path, dependency: str, replacement: str
+) -> None:
+    _replace(
+        repository_copy,
+        "backend/pyproject.toml",
+        f'"{dependency}"',
+        f'"{replacement}"',
+    )
+
+    assert validate_repository(repository_copy)
 
 
 @pytest.mark.parametrize(
@@ -294,6 +370,17 @@ def test_rejects_dockerfile_without_hash_locked_install(repository_copy: Path) -
     contents = dockerfile_path.read_text(encoding="utf-8")
     contents = contents.replace(" --require-hashes", "")
     dockerfile_path.write_text(contents, encoding="utf-8")
+
+    assert validate_repository(repository_copy)
+
+
+def test_rejects_dockerfile_copying_test_fixtures(repository_copy: Path) -> None:
+    _replace(
+        repository_copy,
+        "backend/Dockerfile",
+        "COPY app ./app\n",
+        "COPY app ./app\nCOPY tests ./tests\n",
+    )
 
     assert validate_repository(repository_copy)
 

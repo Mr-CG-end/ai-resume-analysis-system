@@ -413,6 +413,37 @@ async def test_missing_boundary_maps_to_safe_malformed_multipart_without_parser_
 
 
 @pytest.mark.asyncio
+async def test_invalid_multipart_body_maps_to_safe_error_without_parser_detail(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    application = _test_app(lambda *_args, **_kwargs: _parsed())
+    transport = httpx.ASGITransport(app=application, raise_app_exceptions=False)
+    caplog.set_level(logging.WARNING, logger="app.core.error_handlers")
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/internal/pdf",
+            content=b"private-malformed-body",
+            headers={
+                "Content-Type": "multipart/form-data; boundary=x",
+                "X-Request-ID": "req-invalid-multipart-body",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == {
+        "code": "MALFORMED_MULTIPART",
+        "message": "上传请求格式无效。",
+        "request_id": "req-invalid-multipart-body",
+        "details": {},
+    }
+    assert response.headers["X-Request-ID"] == "req-invalid-multipart-body"
+    assert "private-malformed-body" not in response.text
+    record_data = str(caplog.records[-1].__dict__)
+    assert "private-malformed-body" not in record_data
+
+
+@pytest.mark.asyncio
 async def test_upload_error_log_does_not_include_filename_or_body(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

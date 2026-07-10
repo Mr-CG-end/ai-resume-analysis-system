@@ -1,6 +1,7 @@
 from typing import Protocol
 
 from fastapi import Request
+from python_multipart.exceptions import MultipartParseError
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException
@@ -155,4 +156,6 @@ async def parse_pdf_upload(
     except MultiPartException as exc:
         if "maximum number of files" in exc.message.lower():
             raise MultipleFilesNotAllowedError() from exc
+        raise MalformedMultipartError() from exc
+    except MultipartParseError as exc:
         raise MalformedMultipartError() from exc

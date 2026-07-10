@@ -122,7 +122,7 @@ API 基础路径为 `/api/v1`，请求和响应使用 UTF-8。除文件上传外
 | `400` | `FILE_REQUIRED` | 未提供文件 |
 | `400` | `MULTIPLE_FILES_NOT_ALLOWED` | 同时提交多份文件 |
 | `400` | `MALFORMED_MULTIPART` | multipart 请求缺少 boundary、字段超限或格式无效 |
-| `413` | `PDF_TOO_LARGE` | 文件大于 10 MB |
+| `413` | `PDF_TOO_LARGE` | PDF 文件大于 10 MB，或 multipart 请求体超过文件上限加 64 KiB 协议预算 |
 | `415` | `UNSUPPORTED_MEDIA_TYPE` | 扩展名、MIME 或文件头不是有效 PDF |
 | `422` | `PDF_PAGE_LIMIT_EXCEEDED` | PDF 超过 30 页 |
 | `422` | `PDF_ENCRYPTED` | PDF 已加密且不能解析 |

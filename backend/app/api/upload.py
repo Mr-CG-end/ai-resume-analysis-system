@@ -3,12 +3,36 @@ from typing import Protocol
 from fastapi import Request
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
+from starlette.formparsers import MultiPartException
+from starlette.types import Message, Receive
 
 from app.domain.errors import DomainError, PdfTooLargeError
 from app.domain.pdf import ParsedPdf
 from app.services.pdf import parse_pdf
 
 READ_CHUNK_BYTES = 64 * 1024
+MULTIPART_ENVELOPE_BYTES = 64 * 1024
+MAX_MULTIPART_FILES = 2
+MAX_MULTIPART_FIELDS = 10
+
+
+class _RequestBodyTooLarge(MultiPartException):
+    pass
+
+
+class _LimitedReceive:
+    def __init__(self, receive: Receive, *, max_bytes: int) -> None:
+        self._receive = receive
+        self._max_bytes = max_bytes
+        self._bytes_received = 0
+
+    async def __call__(self) -> Message:
+        message = await self._receive()
+        if message["type"] == "http.request":
+            self._bytes_received += len(message.get("body", b""))
+            if self._bytes_received > self._max_bytes:
+                raise _RequestBodyTooLarge("Request body exceeded maximum size.")
+        return message
 
 
 class PdfParser(Protocol):
@@ -59,31 +83,59 @@ async def parse_pdf_upload(
     max_pages: int = 30,
     max_chars: int = 100_000,
 ) -> ParsedPdf:
-    async with request.form() as form:
-        file_parts = [
-            (field_name, value)
-            for field_name, value in form.multi_items()
-            if isinstance(value, UploadFile)
-        ]
+    request_body_limit = max_bytes + MULTIPART_ENVELOPE_BYTES
+    content_length = request.headers.get("Content-Length")
+    if content_length is not None:
+        try:
+            declared_length = int(content_length)
+        except ValueError:
+            declared_length = 0
+        if declared_length > request_body_limit:
+            raise PdfTooLargeError(details={"max_bytes": max_bytes})
 
-        if len(file_parts) > 1:
-            raise MultipleFilesNotAllowedError()
-        if len(file_parts) != 1 or file_parts[0][0] != "file":
-            raise FileRequiredError()
-
-        upload = file_parts[0][1]
-        pdf_bytes = await _read_at_most(upload, max_bytes=max_bytes)
-        if len(pdf_bytes) > max_bytes:
-            raise PdfTooLargeError(
-                details={"max_bytes": max_bytes, "actual_bytes": len(pdf_bytes)},
-            )
-
-        return await run_in_threadpool(
-            parser,
-            pdf_bytes,
-            filename=upload.filename or "",
-            content_type=upload.content_type or "",
-            max_bytes=max_bytes,
-            max_pages=max_pages,
-            max_chars=max_chars,
+    scope = dict(request.scope)
+    scope.pop("app", None)
+    bounded_request = Request(
+        scope,
+        receive=_LimitedReceive(request.receive, max_bytes=request_body_limit),
+    )
+    try:
+        form_context = bounded_request.form(
+            max_files=MAX_MULTIPART_FILES,
+            max_fields=MAX_MULTIPART_FIELDS,
+            max_part_size=request_body_limit,
         )
+        async with form_context as form:
+            file_parts = [
+                (field_name, value)
+                for field_name, value in form.multi_items()
+                if isinstance(value, UploadFile)
+            ]
+
+            if len(file_parts) > 1:
+                raise MultipleFilesNotAllowedError()
+            if len(file_parts) != 1 or file_parts[0][0] != "file":
+                raise FileRequiredError()
+
+            upload = file_parts[0][1]
+            pdf_bytes = await _read_at_most(upload, max_bytes=max_bytes)
+            if len(pdf_bytes) > max_bytes:
+                raise PdfTooLargeError(
+                    details={"max_bytes": max_bytes, "actual_bytes": len(pdf_bytes)},
+                )
+
+            return await run_in_threadpool(
+                parser,
+                pdf_bytes,
+                filename=upload.filename or "",
+                content_type=upload.content_type or "",
+                max_bytes=max_bytes,
+                max_pages=max_pages,
+                max_chars=max_chars,
+            )
+    except _RequestBodyTooLarge as exc:
+        raise PdfTooLargeError(details={"max_bytes": max_bytes}) from exc
+    except MultiPartException as exc:
+        if "maximum number of files" in exc.message.lower():
+            raise MultipleFilesNotAllowedError() from exc
+        raise PdfTooLargeError(details={"max_bytes": max_bytes}) from exc

@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Mapping
 from uuid import uuid4
 
@@ -8,6 +9,8 @@ from starlette.responses import JSONResponse
 
 from app.domain.errors import DomainError
 from app.schemas.errors import ErrorDetail, ErrorResponse
+
+logger = logging.getLogger(__name__)
 
 
 def _request_id(request: Request) -> str:
@@ -34,6 +37,16 @@ def _error_response(
             request_id=request_id,
             details=dict(details or {}),
         )
+    )
+    logger.warning(
+        "expected_request_error",
+        extra={
+            "event": "expected_request_error",
+            "request_id": request_id,
+            "method": request.method,
+            "status": status_code,
+            "code": code,
+        },
     )
     return JSONResponse(
         status_code=status_code,

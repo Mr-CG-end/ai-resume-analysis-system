@@ -1,4 +1,5 @@
-from collections.abc import Callable
+import logging
+from collections.abc import AsyncIterator, Callable
 from dataclasses import asdict
 
 import httpx
@@ -10,6 +11,17 @@ from app.api.upload import parse_pdf_upload
 from app.core.error_handlers import register_error_handlers
 from app.core.request_id import RequestIdMiddleware
 from app.domain.pdf import ParsedPdf
+
+
+class CountingStream(httpx.AsyncByteStream):
+    def __init__(self, chunks: list[bytes]) -> None:
+        self.chunks = chunks
+        self.yielded = 0
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        for chunk in self.chunks:
+            self.yielded += 1
+            yield chunk
 
 
 def _test_app(parser: Callable[..., ParsedPdf]) -> FastAPI:
@@ -191,6 +203,122 @@ async def test_adapter_rejects_max_plus_one_without_calling_parser() -> None:
         "details": {"max_bytes": 8, "actual_bytes": 9},
     }
     assert parser_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_content_length_fast_rejection_does_not_consume_request_body() -> None:
+    application = _test_app(lambda *_args, **_kwargs: _parsed())
+    stream = CountingStream([b"body-must-not-be-read"])
+    transport = httpx.ASGITransport(app=application, raise_app_exceptions=False)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/internal/pdf",
+            content=stream,
+            headers={
+                "Content-Type": "multipart/form-data; boundary=x",
+                "Content-Length": "100000",
+                "X-Request-ID": "req-fast-reject",
+            },
+        )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "PDF_TOO_LARGE"
+    assert stream.yielded == 0
+
+
+@pytest.mark.asyncio
+async def test_chunked_oversized_request_stops_consuming_after_total_body_budget() -> None:
+    application = _test_app(lambda *_args, **_kwargs: _parsed())
+    encoded = httpx.Request(
+        "POST",
+        "http://test/internal/pdf",
+        files=[("file", ("sample.pdf", b"x" * 200_000, "application/pdf"))],
+    )
+    body = encoded.read()
+    chunk_size = 4096
+    chunks = [body[index : index + chunk_size] for index in range(0, len(body), chunk_size)]
+    stream = CountingStream(chunks)
+    transport = httpx.ASGITransport(app=application, raise_app_exceptions=False)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/internal/pdf",
+            content=stream,
+            headers={
+                "Content-Type": encoded.headers["Content-Type"],
+                "X-Request-ID": "req-chunked-limit",
+            },
+        )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "PDF_TOO_LARGE"
+    assert stream.yielded * chunk_size < len(body)
+
+
+@pytest.mark.asyncio
+async def test_three_files_map_parser_limit_to_multiple_files_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tempfile
+
+    opened: list[tempfile.SpooledTemporaryFile[bytes]] = []
+    original_tempfile = tempfile.SpooledTemporaryFile
+
+    def recording_tempfile(*, max_size: int) -> tempfile.SpooledTemporaryFile[bytes]:
+        file = original_tempfile(max_size=max_size)
+        opened.append(file)
+        return file
+
+    monkeypatch.setattr("starlette.formparsers.SpooledTemporaryFile", recording_tempfile)
+    response = await _post(
+        _test_app(lambda *_args, **_kwargs: _parsed()),
+        files=[
+            ("file", ("one.pdf", b"1", "application/pdf")),
+            ("file", ("two.pdf", b"2", "application/pdf")),
+            ("file", ("three.pdf", b"3", "application/pdf")),
+        ],
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "MULTIPLE_FILES_NOT_ALLOWED"
+    assert len(opened) == 2
+    assert all(file.closed for file in opened)
+
+
+@pytest.mark.asyncio
+async def test_form_parser_field_limit_maps_to_pdf_too_large() -> None:
+    response = await _post(
+        _test_app(lambda *_args, **_kwargs: _parsed()),
+        data={f"field-{index}": "x" for index in range(11)},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "PDF_TOO_LARGE"
+
+
+@pytest.mark.asyncio
+async def test_upload_error_log_does_not_include_filename_or_body(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="app.core.error_handlers")
+
+    response = await _post(
+        _test_app(lambda *_args, **_kwargs: _parsed()),
+        files=[
+            (
+                "resume",
+                ("private-filename.pdf", b"private-body-content", "application/pdf"),
+            )
+        ],
+        request_id="req-upload-privacy",
+    )
+
+    assert response.status_code == 400
+    record_data = str(caplog.records[-1].__dict__)
+    assert "private-filename.pdf" not in record_data
+    assert "private-body-content" not in record_data
+    assert caplog.records[-1].request_id == response.headers["X-Request-ID"]
 
 
 @pytest.mark.asyncio

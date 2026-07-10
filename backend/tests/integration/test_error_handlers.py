@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 import pytest
 from fastapi import FastAPI, HTTPException, Query
@@ -44,7 +46,8 @@ async def _get(path: str) -> httpx.Response:
 
 
 @pytest.mark.asyncio
-async def test_domain_error_uses_safe_unified_contract() -> None:
+async def test_domain_error_uses_safe_unified_contract(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING, logger="app.core.error_handlers")
     response = await _get("/domain")
 
     assert response.status_code == 409
@@ -57,10 +60,22 @@ async def test_domain_error_uses_safe_unified_contract() -> None:
             "details": {"limit": 3},
         }
     }
+    record = caplog.records[-1]
+    assert record.getMessage() == "expected_request_error"
+    assert (record.event, record.request_id, record.method, record.status, record.code) == (
+        "expected_request_error",
+        "req-errors",
+        "GET",
+        409,
+        "EXPECTED_FAILURE",
+    )
 
 
 @pytest.mark.asyncio
-async def test_request_validation_error_does_not_echo_sensitive_input() -> None:
+async def test_request_validation_error_does_not_echo_sensitive_input(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="app.core.error_handlers")
     response = await _get("/validation?secret=private-value")
 
     assert response.status_code == 422
@@ -72,10 +87,16 @@ async def test_request_validation_error_does_not_echo_sensitive_input() -> None:
         "details": {},
     }
     assert "private-value" not in response.text
+    assert "private-value" not in str(caplog.records[-1].__dict__)
+    assert caplog.records[-1].request_id == response.json()["error"]["request_id"]
+    assert caplog.records[-1].request_id == response.headers["X-Request-ID"]
 
 
 @pytest.mark.asyncio
-async def test_http_exception_uses_status_based_code_and_hides_detail() -> None:
+async def test_http_exception_uses_status_based_code_and_hides_detail(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.WARNING, logger="app.core.error_handlers")
     response = await _get("/http")
 
     assert response.status_code == 418
@@ -88,3 +109,12 @@ async def test_http_exception_uses_status_based_code_and_hides_detail() -> None:
         "details": {},
     }
     assert "private-detail-must-not-appear" not in response.text
+    assert "private-detail-must-not-appear" not in str(caplog.records[-1].__dict__)
+    record = caplog.records[-1]
+    assert (record.event, record.request_id, record.method, record.status, record.code) == (
+        "expected_request_error",
+        "req-errors",
+        "GET",
+        418,
+        "HTTP_418",
+    )

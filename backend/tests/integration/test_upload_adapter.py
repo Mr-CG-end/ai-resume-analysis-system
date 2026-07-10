@@ -364,14 +364,52 @@ async def test_three_files_map_parser_limit_to_multiple_files_error(
 
 
 @pytest.mark.asyncio
-async def test_form_parser_field_limit_maps_to_pdf_too_large() -> None:
+async def test_form_parser_field_limit_maps_to_safe_malformed_multipart() -> None:
     response = await _post(
         _test_app(lambda *_args, **_kwargs: _parsed()),
         data={f"field-{index}": "x" for index in range(11)},
+        request_id="req-too-many-fields",
     )
 
-    assert response.status_code == 413
-    assert response.json()["error"]["code"] == "PDF_TOO_LARGE"
+    assert response.status_code == 400
+    assert response.json()["error"] == {
+        "code": "MALFORMED_MULTIPART",
+        "message": "上传请求格式无效。",
+        "request_id": "req-too-many-fields",
+        "details": {},
+    }
+
+
+@pytest.mark.asyncio
+async def test_missing_boundary_maps_to_safe_malformed_multipart_without_parser_detail(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    application = _test_app(lambda *_args, **_kwargs: _parsed())
+    transport = httpx.ASGITransport(app=application, raise_app_exceptions=False)
+    caplog.set_level(logging.WARNING, logger="app.core.error_handlers")
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/internal/pdf",
+            content=b"private-body-content",
+            headers={
+                "Content-Type": "multipart/form-data",
+                "X-Request-ID": "req-malformed-upload",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == {
+        "code": "MALFORMED_MULTIPART",
+        "message": "上传请求格式无效。",
+        "request_id": "req-malformed-upload",
+        "details": {},
+    }
+    assert response.headers["X-Request-ID"] == "req-malformed-upload"
+    assert "boundary" not in response.text.lower()
+    record_data = str(caplog.records[-1].__dict__)
+    assert "private-body-content" not in record_data
+    assert "boundary" not in record_data.lower()
 
 
 @pytest.mark.asyncio

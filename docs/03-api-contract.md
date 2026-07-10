@@ -121,6 +121,7 @@ API 基础路径为 `/api/v1`，请求和响应使用 UTF-8。除文件上传外
 | --- | --- | --- |
 | `400` | `FILE_REQUIRED` | 未提供文件 |
 | `400` | `MULTIPLE_FILES_NOT_ALLOWED` | 同时提交多份文件 |
+| `400` | `MALFORMED_MULTIPART` | multipart 请求缺少 boundary、字段超限或格式无效 |
 | `413` | `PDF_TOO_LARGE` | 文件大于 10 MB |
 | `415` | `UNSUPPORTED_MEDIA_TYPE` | 扩展名、MIME 或文件头不是有效 PDF |
 | `422` | `PDF_PAGE_LIMIT_EXCEEDED` | PDF 超过 30 页 |
@@ -128,6 +129,7 @@ API 基础路径为 `/api/v1`，请求和响应使用 UTF-8。除文件上传外
 | `422` | `PDF_CORRUPTED` | PDF 结构损坏 |
 | `422` | `PDF_NO_EXTRACTABLE_TEXT` | 扫描件或没有有效文本 |
 | `422` | `PDF_TEXT_TOO_LONG` | 清洗后文本超过 100,000 字符 |
+| `422` | `PDF_PROCESSING_LIMIT_EXCEEDED` | PDF 内容流或原始文本超过安全处理上限 |
 
 AI 故障但规则降级成功时仍返回 `201`，并设置 `degraded=true`。只有 PDF 解析等不可降级的核心步骤失败时才返回错误。
 

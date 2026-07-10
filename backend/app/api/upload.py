@@ -57,6 +57,12 @@ class MultipleFilesNotAllowedError(DomainError):
     status_code = 400
 
 
+class MalformedMultipartError(DomainError):
+    code = "MALFORMED_MULTIPART"
+    message = "上传请求格式无效。"
+    status_code = 400
+
+
 async def _read_at_most(upload: UploadFile, *, max_bytes: int) -> bytes:
     chunks: list[bytes] = []
     bytes_read = 0
@@ -149,4 +155,4 @@ async def parse_pdf_upload(
     except MultiPartException as exc:
         if "maximum number of files" in exc.message.lower():
             raise MultipleFilesNotAllowedError() from exc
-        raise PdfTooLargeError(details={"max_bytes": max_bytes}) from exc
+        raise MalformedMultipartError() from exc

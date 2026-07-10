@@ -18,7 +18,7 @@ flowchart LR
 
 ### 环境准备
 
-- Python 3.11 或更高版本。
+- Python 3.12.13。
 - Node.js 22 LTS 与 pnpm。
 - Docker Desktop，仅在需要验证 Redis 缓存时使用。
 - 一个支持结构化 JSON 输出的 AI API 凭据。
@@ -62,7 +62,7 @@ pnpm dev
 
 ## 后端生产镜像
 
-`backend/Dockerfile` 使用多阶段或精简构建，最终镜像基于固定 Python 3.11 slim 版本。镜像只包含运行依赖、应用和必要字体，不复制测试资料、`.env`、Git 元数据或本地缓存。
+`backend/Dockerfile` 使用精简构建，最终镜像固定为 `python:3.12.13-slim-bookworm`。生产依赖由 `pip-tools` 从 `backend/pyproject.toml` 主依赖生成到 `backend/requirements.lock`，镜像使用 `--require-hashes` 安装后再复制应用代码。镜像只包含运行依赖、应用和必要字体，不复制测试资料、`.env`、Git 元数据或本地缓存。
 
 阿里云 FC 自定义容器只支持 AMD64 镜像。构建命令必须显式指定平台：
 

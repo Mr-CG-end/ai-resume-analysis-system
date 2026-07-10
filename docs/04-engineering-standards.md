@@ -6,9 +6,11 @@
 
 ## 技术基线
 
+Python 3.12.13 是本地开发、CI 与生产镜像的统一解释器版本。
+
 | 层次 | 基线 |
 | --- | --- |
-| Python | 3.11 及以上，生产镜像固定 3.11 小版本 |
+| Python | 3.12.13，开发、CI 与生产镜像使用同一精确版本 |
 | 后端 | FastAPI、Pydantic v2、PyMuPDF、redis-py |
 | Node.js | 22 LTS |
 | 前端 | React、TypeScript strict、Vite、pnpm |

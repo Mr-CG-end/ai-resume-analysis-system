@@ -6,7 +6,7 @@
 
 **Architecture:** Keep a monorepo with independent `backend/` and `frontend/` applications. The backend exposes versioned REST endpoints and runs directly in development; the frontend calls a configurable API base URL. Redis is optional and runs through Docker Compose. CI validates both applications, while a separate Pages workflow publishes the frontend.
 
-**Tech Stack:** Python 3.12, FastAPI, Pydantic v2, pytest, Ruff, mypy; Node 22, React, TypeScript, Vite, Vitest, Testing Library, ESLint; Redis 7; GitHub Actions.
+**Tech Stack:** Python 3.12.13, FastAPI, Pydantic v2, pytest, Ruff, mypy; Node 22, React, TypeScript, Vite, Vitest, Testing Library, ESLint; Redis 7; GitHub Actions.
 
 ## Global Constraints
 

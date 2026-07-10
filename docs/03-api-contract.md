@@ -228,7 +228,7 @@ AI 失败且规则评分可用时返回成功响应，并设置 `method=rule_fal
 }
 ```
 
-Redis 禁用或不可用时，整体状态为 `degraded`，HTTP 状态仍为 `200`，因为缓存不是核心依赖。AI 未配置时返回 `503`，状态为 `unavailable`。
+Redis 未配置时依赖状态为 `disabled`，整体状态仍为 `ok`；Redis 已配置但 PING 失败或超时时，依赖状态为 `down`，整体状态为 `degraded`。两种情况 HTTP 状态均为 `200`，因为缓存不是核心依赖。AI 未配置时返回 `503`，AI 与整体状态均为 `unavailable`。
 
 ## 统一错误结构
 

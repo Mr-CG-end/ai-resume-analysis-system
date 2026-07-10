@@ -1,13 +1,13 @@
-FROM python:3.12-slim
+FROM python:3.12.13-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-COPY pyproject.toml ./
+COPY requirements.lock ./
+RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock
 COPY app ./app
-RUN python -m pip install --no-cache-dir .
 
 EXPOSE 9000
 

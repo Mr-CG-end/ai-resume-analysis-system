@@ -15,6 +15,7 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
             if incoming_request_id is not None and SAFE_REQUEST_ID.fullmatch(incoming_request_id)
             else str(uuid4())
         )
+        request.state.request_id = request_id
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response

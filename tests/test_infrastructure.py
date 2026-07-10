@@ -76,7 +76,7 @@ def test_ci_runs_backend_root_and_frontend_checks_on_python_3_12_13() -> None:
         "ruff format --check .",
         "ruff check .",
         "mypy app",
-        "pytest",
+        "pytest --cov=app --cov-report=term-missing",
     ]
     infrastructure_commands = [
         step["run"] for step in jobs["infrastructure"]["steps"] if "run" in step
@@ -146,6 +146,7 @@ def test_python_and_production_lock_contract_are_exact() -> None:
     pyproject = (REPOSITORY_ROOT / "backend/pyproject.toml").read_text(encoding="utf-8")
     assert 'requires-python = "==3.12.13"' in pyproject
     assert '"pip-tools' in pyproject
+    assert '"pytest-cov' in pyproject
 
     dockerfile = (REPOSITORY_ROOT / "backend/Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.startswith("FROM python:3.12.13-slim-bookworm\n")
@@ -168,7 +169,15 @@ def test_python_and_production_lock_contract_are_exact() -> None:
         end = lock.find("\n" + requirement_lines[index + 1], start) if index + 1 < len(requirement_lines) else len(lock)
         assert "--hash=sha256:" in lock[start:end]
 
-    dev_only = ("httpx==", "mypy==", "pip-tools==", "pytest==", "pytest-asyncio==", "ruff==")
+    dev_only = (
+        "httpx==",
+        "mypy==",
+        "pip-tools==",
+        "pytest==",
+        "pytest-asyncio==",
+        "pytest-cov==",
+        "ruff==",
+    )
     assert not any(line.lower().startswith(dev_only) for line in requirement_lines)
 
 

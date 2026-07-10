@@ -201,7 +201,7 @@ def _validate_ci(ci: str, errors: list[str]) -> None:
                 "ruff format --check .",
                 "ruff check .",
                 "mypy app",
-                "pytest",
+                "pytest --cov=app --cov-report=term-missing",
             ],
             {"actions/checkout@v7", "actions/setup-python@v6"},
         ),
@@ -355,10 +355,12 @@ def _validate_pyproject(pyproject: str, errors: list[str]) -> None:
         errors.append("backend/pyproject.toml requires-python must be exactly 3.12.13")
     optional = project.get("optional-dependencies")
     dev = optional.get("dev") if isinstance(optional, dict) else None
-    if not isinstance(dev, list) or not any(
-        isinstance(item, str) and _normalize_package_name(item) == "pip-tools" for item in dev
-    ):
-        errors.append("backend/pyproject.toml dev dependencies must include pip-tools")
+    dev_names = {
+        _normalize_package_name(item) for item in dev if isinstance(item, str)
+    } if isinstance(dev, list) else set()
+    required_dev_names = {"pip-tools", "pytest-cov"}
+    if not required_dev_names.issubset(dev_names):
+        errors.append("backend/pyproject.toml dev dependencies must include pip-tools and pytest-cov")
 
     ruff = document.get("tool", {}).get("ruff", {})
     mypy = document.get("tool", {}).get("mypy", {})
@@ -396,7 +398,15 @@ def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
     required_runtime_names = {"fastapi", "pydantic-settings", "redis", "uvicorn"}
     if not required_runtime_names.issubset(locked_names):
         errors.append("backend/requirements.lock is missing a direct runtime dependency")
-    forbidden_dev_names = {"httpx", "mypy", "pip-tools", "pytest", "pytest-asyncio", "ruff"}
+    forbidden_dev_names = {
+        "httpx",
+        "mypy",
+        "pip-tools",
+        "pytest",
+        "pytest-asyncio",
+        "pytest-cov",
+        "ruff",
+    }
     if locked_names & forbidden_dev_names:
         errors.append("backend/requirements.lock must not contain direct development-only tools")
 

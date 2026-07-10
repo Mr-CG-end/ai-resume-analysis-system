@@ -24,7 +24,7 @@ jobs:
       - run: ruff format --check .
       - run: ruff check .
       - run: mypy app
-      - run: pytest
+      - run: pytest --cov=app --cov-report=term-missing
 
   infrastructure:
     runs-on: ubuntu-latest

@@ -13,11 +13,15 @@ RedisPing = Callable[[str], Awaitable[bool]]
 
 
 async def ping_redis(redis_url: str) -> bool:
-    client = Redis.from_url(
-        redis_url,
-        socket_connect_timeout=0.5,
-        socket_timeout=0.5,
-    )
+    try:
+        client = Redis.from_url(
+            redis_url,
+            socket_connect_timeout=0.5,
+            socket_timeout=0.5,
+        )
+    except ValueError:
+        return False
+
     try:
         ping_result = await cast(Awaitable[object], client.ping())
         return bool(ping_result)

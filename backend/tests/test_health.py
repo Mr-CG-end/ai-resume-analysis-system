@@ -3,6 +3,7 @@ from uuid import UUID
 
 import httpx
 import pytest
+from fastapi import FastAPI, HTTPException
 
 from app.api.routes import health as health_module
 from app.core.config import Settings
@@ -131,6 +132,28 @@ async def test_redis_ping_uses_short_timeouts_and_closes_client(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("redis_url", ["", "not-a-url"])
+async def test_health_is_degraded_when_redis_url_is_empty_or_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+    redis_url: str,
+) -> None:
+    class InvalidRedis:
+        @staticmethod
+        def from_url(_: str, **__: float) -> None:
+            raise ValueError("invalid redis URL")
+
+    monkeypatch.setattr(health_module, "Redis", InvalidRedis)
+
+    response = await _request_health(
+        settings=Settings(_env_file=None, ai_api_key="test-key", redis_url=redis_url)
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "degraded"
+    assert response.json()["dependencies"] == {"ai": "configured", "redis": "down"}
+
+
+@pytest.mark.asyncio
 async def test_request_id_echoes_safe_incoming_value() -> None:
     response = await _request_health(
         settings=Settings(_env_file=None, ai_api_key="test-key"),
@@ -149,3 +172,47 @@ async def test_request_id_generates_uuid_when_missing_or_invalid(request_id: str
 
     generated = response.headers["X-Request-ID"]
     assert str(UUID(generated)) == generated
+
+
+@pytest.mark.asyncio
+async def test_request_id_is_preserved_on_unhandled_server_error() -> None:
+    from app.main import create_app
+
+    test_app: FastAPI = create_app()
+
+    @test_app.get("/test/unhandled")
+    async def raise_unhandled_error() -> None:
+        raise RuntimeError("unexpected failure")
+
+    transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/test/unhandled",
+            headers={"X-Request-ID": "req-unhandled-500"},
+        )
+
+    assert response.status_code == 500
+    assert response.headers["X-Request-ID"] == "req-unhandled-500"
+    assert response.text == "Internal Server Error"
+
+
+@pytest.mark.asyncio
+async def test_request_id_middleware_preserves_http_exception_semantics() -> None:
+    from app.main import create_app
+
+    test_app: FastAPI = create_app()
+
+    @test_app.get("/test/teapot")
+    async def raise_http_exception() -> None:
+        raise HTTPException(status_code=418, detail="still a teapot")
+
+    transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/test/teapot",
+            headers={"X-Request-ID": "req-http-exception"},
+        )
+
+    assert response.status_code == 418
+    assert response.headers["X-Request-ID"] == "req-http-exception"
+    assert response.json() == {"detail": "still a teapot"}

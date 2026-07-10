@@ -56,7 +56,7 @@ cd backend
 ruff format --check .
 ruff check .
 mypy app
-pytest
+pytest --cov=app --cov-report=term-missing
 ```
 
 前端质量检查：

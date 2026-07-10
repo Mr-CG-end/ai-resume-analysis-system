@@ -1,10 +1,12 @@
 import re
 import shutil
+from io import BytesIO
 from pathlib import Path
 
 import pytest
-import pymupdf
 import yaml
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 
 from scripts.generate_pdf_fixtures import generate_fixtures
 from scripts.validate_infrastructure import validate_repository
@@ -151,12 +153,13 @@ def test_redis_port_is_bound_to_loopback() -> None:
 def test_python_and_production_lock_contract_are_exact() -> None:
     pyproject = (REPOSITORY_ROOT / "backend/pyproject.toml").read_text(encoding="utf-8")
     assert 'requires-python = "==3.12.13"' in pyproject
-    assert '"PyMuPDF>=1.25,<2.0"' in pyproject
+    assert '"pypdf>=6.14.2,<7"' in pyproject
     assert '"python-multipart>=0.0.20,<1.0"' in pyproject
     assert '"uvicorn>=0.34,<1.0"' in pyproject
     assert "uvicorn[standard]" not in pyproject
     assert '"pip-tools' in pyproject
     assert '"pytest-cov' in pyproject
+    assert '"reportlab>=5,<6"' in pyproject
 
     dockerfile = (REPOSITORY_ROOT / "backend/Dockerfile").read_text(encoding="utf-8")
     assert dockerfile.startswith("FROM python:3.12.13-slim-bookworm\n")
@@ -208,10 +211,14 @@ def test_python_and_production_lock_contract_are_exact() -> None:
         re.sub(r"[-_.]+", "-", re.match(r"^[A-Za-z0-9_.-]+", line).group()).lower()
         for line in requirement_lines
     }
-    assert {"pymupdf", "python-multipart", "uvicorn"}.issubset(locked_names)
+    assert {"pypdf", "python-multipart", "uvicorn"}.issubset(locked_names)
     assert (
         not {
+            "cryptography",
             "httptools",
+            "pycryptodome",
+            "pycryptodomex",
+            "reportlab",
             "uvloop",
             "watchfiles",
             "websockets",
@@ -234,74 +241,68 @@ def test_canonical_pdf_fixtures_are_synthetic_and_structurally_stable() -> None:
     }
     assert {path.name for path in fixture_directory.glob("*.pdf")} == expected_names
 
-    private_metadata = {
-        "title",
-        "author",
-        "subject",
-        "keywords",
-        "creator",
-        "producer",
-        "creationDate",
-        "modDate",
-        "trapped",
-    }
-    with pymupdf.open(fixture_directory / "resume-valid-3-pages.pdf") as document:
-        pages = [page.get_text() for page in document]
-        assert document.page_count == 3
-        assert "PAGE ONE - PROFILE" in pages[0]
-        assert "PAGE TWO - EXPERIENCE" in pages[1]
-        assert "PAGE THREE - EDUCATION AND PROJECTS" in pages[2]
-        assert not any(document.metadata[key] for key in private_metadata)
+    valid = PdfReader(fixture_directory / "resume-valid-3-pages.pdf", strict=True)
+    pages = [page.extract_text() for page in valid.pages]
+    assert len(valid.pages) == 3
+    assert "PAGE ONE - PROFILE" in pages[0]
+    assert "PAGE TWO - EXPERIENCE" in pages[1]
+    assert "PAGE THREE - EDUCATION AND PROJECTS" in pages[2]
+    assert valid.metadata is None
 
-    with pymupdf.open(fixture_directory / "resume-missing-address.pdf") as document:
-        text = "".join(page.get_text() for page in document)
-        assert "Phone:" in text and "Email:" in text
-        assert "Address:" not in text
-        assert "location details" in text
+    missing_address = PdfReader(
+        fixture_directory / "resume-missing-address.pdf", strict=True
+    )
+    text = "".join(page.extract_text() for page in missing_address.pages)
+    assert "Phone:" in text and "Email:" in text
+    assert "Address:" not in text
+    assert "location details" in text
+    assert missing_address.metadata is None
 
-    with pymupdf.open(fixture_directory / "resume-repeated-header.pdf") as document:
-        pages = [page.get_text() for page in document]
-        assert len(pages) == 3
-        assert all(
-            page.count("DEMO CANDIDATE - CONFIDENTIAL TEST FIXTURE") == 1
-            and page.count("CANONICAL RESUME FIXTURE") == 1
-            and f"Page {number} of 3" in page
-            for number, page in enumerate(pages, start=1)
-        )
-        assert all(
-            f"SECTION {section}" in page
-            for section, page in zip(("ONE", "TWO", "THREE"), pages, strict=True)
-        )
+    repeated_header = PdfReader(
+        fixture_directory / "resume-repeated-header.pdf", strict=True
+    )
+    pages = [page.extract_text() for page in repeated_header.pages]
+    assert len(pages) == 3
+    assert all(
+        page.count("DEMO CANDIDATE - CONFIDENTIAL TEST FIXTURE") == 1
+        and page.count("CANONICAL RESUME FIXTURE") == 1
+        and f"Page {number} of 3" in page
+        for number, page in enumerate(pages, start=1)
+    )
+    assert all(
+        f"SECTION {section}" in page
+        for section, page in zip(("ONE", "TWO", "THREE"), pages, strict=True)
+    )
 
-    with pymupdf.open(fixture_directory / "resume-scan-only.pdf") as document:
-        assert document.page_count == 1
-        assert not "".join(page.get_text() for page in document).strip()
+    scan_only = PdfReader(fixture_directory / "resume-scan-only.pdf", strict=True)
+    assert len(scan_only.pages) == 1
+    assert not "".join(page.extract_text() for page in scan_only.pages).strip()
+    assert len(scan_only.pages[0].images) == 1
 
-    with pymupdf.open(fixture_directory / "resume-encrypted.pdf") as document:
-        assert document.needs_pass
-        assert document.authenticate("fixture-password")
-        assert not any(document.metadata[key] for key in private_metadata)
+    encrypted = PdfReader(fixture_directory / "resume-encrypted.pdf", strict=True)
+    assert encrypted.is_encrypted
+    assert encrypted.decrypt("fixture-password")
+    assert encrypted.metadata is None
 
     for filename in ("resume-corrupted.pdf", "not-a-pdf.pdf"):
-        with pytest.raises(pymupdf.FileDataError):
-            pymupdf.open(fixture_directory / filename)
+        with pytest.raises(PdfReadError):
+            PdfReader(fixture_directory / filename, strict=True)
 
 
 def _fixture_semantics(path: Path) -> object:
     try:
-        document = pymupdf.open(path)
-    except pymupdf.FileDataError:
+        document = PdfReader(BytesIO(path.read_bytes()), strict=True)
+    except PdfReadError:
         return {"kind": "invalid-pdf"}
-    with document:
-        encrypted = bool(document.needs_pass)
-        if encrypted:
-            assert document.authenticate("fixture-password")
-        return {
-            "kind": "pdf",
-            "encrypted": encrypted,
-            "pages": tuple(page.get_text() for page in document),
-            "images": tuple(len(page.get_images(full=True)) for page in document),
-        }
+    encrypted = document.is_encrypted
+    if encrypted:
+        assert document.decrypt("fixture-password")
+    return {
+        "kind": "pdf",
+        "encrypted": encrypted,
+        "pages": tuple(page.extract_text() for page in document.pages),
+        "images": tuple(len(page.images) for page in document.pages),
+    }
 
 
 def test_canonical_pdf_fixtures_can_be_regenerated_semantically(tmp_path: Path) -> None:
@@ -323,7 +324,8 @@ def test_canonical_pdf_fixtures_can_be_regenerated_semantically(tmp_path: Path) 
 @pytest.mark.parametrize(
     ("dependency", "replacement"),
     [
-        ("PyMuPDF>=1.25,<2.0", "PyMuPDF>=1.24,<2.0"),
+        ("pypdf>=6.14.2,<7", "pypdf>=6.14.1,<7"),
+        ("reportlab>=5,<6", "reportlab>=4,<6"),
         ("python-multipart>=0.0.20,<1.0", "python-multipart>=0.0.19,<1.0"),
         ("uvicorn>=0.34,<1.0", "uvicorn[standard]>=0.34,<1.0"),
     ],
@@ -431,12 +433,34 @@ def test_rejects_ci_without_hash_locked_production_install(
     assert validate_repository(repository_copy)
 
 
-def test_rejects_missing_third_party_release_gate(repository_copy: Path) -> None:
+def test_rejects_missing_third_party_bsd_attribution(repository_copy: Path) -> None:
     _replace(
         repository_copy,
         "README.md",
-        "PyMuPDF 1.28",
-        "PyMuPDF",
+        "BSD-3-Clause",
+        "BSD license",
+    )
+
+    assert validate_repository(repository_copy)
+
+
+def test_rejects_reportlab_as_runtime_dependency(repository_copy: Path) -> None:
+    _replace(
+        repository_copy,
+        "backend/pyproject.toml",
+        '    "pypdf>=6.14.2,<7",\n',
+        '    "pypdf>=6.14.2,<7",\n    "reportlab>=5,<6",\n',
+    )
+
+    assert validate_repository(repository_copy)
+
+
+def test_rejects_incomplete_third_party_bsd_notice(repository_copy: Path) -> None:
+    _replace(
+        repository_copy,
+        "THIRD_PARTY_NOTICES.md",
+        "Copyright (c) 2006-2008, Mathieu Fenniak",
+        "Copyright omitted",
     )
 
     assert validate_repository(repository_copy)
@@ -497,6 +521,21 @@ def test_rejects_missing_production_lock(repository_copy: Path) -> None:
     lock_path = repository_copy / "backend/requirements.lock"
     if lock_path.exists():
         lock_path.unlink()
+
+    assert validate_repository(repository_copy)
+
+
+@pytest.mark.parametrize("package", ["cryptography", "pycryptodome", "reportlab"])
+def test_rejects_non_runtime_pdf_package_in_production_lock(
+    repository_copy: Path, package: str
+) -> None:
+    lock_path = repository_copy / "backend/requirements.lock"
+    lock = lock_path.read_text(encoding="utf-8")
+    lock_path.write_text(
+        f"{lock}\n{package}==1.0.0 \\\n"
+        "    --hash=sha256:0000000000000000000000000000000000000000000000000000000000000000\n",
+        encoding="utf-8",
+    )
 
     assert validate_repository(repository_copy)
 

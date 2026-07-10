@@ -418,7 +418,7 @@ def _validate_pyproject(pyproject: str, errors: list[str]) -> None:
         else {}
     )
     expected_runtime_requirements = {
-        "pymupdf": "PyMuPDF>=1.25,<2.0",
+        "pypdf": "pypdf>=6.14.2,<7",
         "python-multipart": "python-multipart>=0.0.20,<1.0",
         "uvicorn": "uvicorn>=0.34,<1.0",
     }
@@ -428,7 +428,11 @@ def _validate_pyproject(pyproject: str, errors: list[str]) -> None:
     ):
         errors.append(
             "backend/pyproject.toml runtime dependencies must include the bounded "
-            "PyMuPDF, python-multipart and minimal uvicorn requirements"
+            "pypdf, python-multipart and minimal uvicorn requirements"
+        )
+    if "reportlab" in runtime_requirements:
+        errors.append(
+            "backend/pyproject.toml must keep ReportLab out of runtime dependencies"
         )
     optional = project.get("optional-dependencies")
     dev = optional.get("dev") if isinstance(optional, dict) else None
@@ -437,10 +441,15 @@ def _validate_pyproject(pyproject: str, errors: list[str]) -> None:
         if isinstance(dev, list)
         else set()
     )
-    required_dev_names = {"pip-tools", "pytest-cov"}
+    required_dev_names = {"pip-tools", "pytest-cov", "reportlab"}
     if not required_dev_names.issubset(dev_names):
         errors.append(
-            "backend/pyproject.toml dev dependencies must include pip-tools and pytest-cov"
+            "backend/pyproject.toml dev dependencies must include pip-tools, "
+            "pytest-cov and ReportLab"
+        )
+    if not isinstance(dev, list) or "reportlab>=5,<6" not in dev:
+        errors.append(
+            "backend/pyproject.toml must bound the ReportLab fixture dependency to >=5,<6"
         )
 
     ruff = document.get("tool", {}).get("ruff", {})
@@ -487,7 +496,7 @@ def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
     required_runtime_names = {
         "fastapi",
         "pydantic-settings",
-        "pymupdf",
+        "pypdf",
         "python-multipart",
         "redis",
         "uvicorn",
@@ -526,6 +535,17 @@ def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
         errors.append(
             "backend/requirements.lock must not contain direct development-only tools"
         )
+    forbidden_pdf_supply_names = {
+        "cryptography",
+        "pycryptodome",
+        "pycryptodomex",
+        "reportlab",
+    }
+    if locked_names & forbidden_pdf_supply_names:
+        errors.append(
+            "backend/requirements.lock must exclude fixture-only, legacy PDF and "
+            "optional crypto dependencies"
+        )
 
 
 def _validate_python_documentation(root: Path, errors: list[str]) -> None:
@@ -545,16 +565,22 @@ def _validate_third_party_license_notice(root: Path, errors: list[str]) -> None:
     readme = _read_required(root, "README.md", errors)
     notice = _read_required(root, "THIRD_PARTY_NOTICES.md", errors)
     required_markers = (
-        "PyMuPDF 1.28",
-        "AGPL-3.0",
-        "commercial license",
-        "https://pymupdf.readthedocs.io/en/latest/about.html#license-and-copyright",
+        "pypdf 6.14.2",
+        "ReportLab 5.0.0",
+        "BSD-3-Clause",
+        "https://github.com/py-pdf/pypdf/blob/6.14.2/LICENSE",
+        "https://docs.reportlab.com/developerfaqs/#licensing",
     )
     if readme and not all(marker in readme for marker in required_markers):
-        errors.append("README.md must document the PyMuPDF 1.28 release license gate")
-    if notice and not all(marker in notice for marker in required_markers):
+        errors.append("README.md must document the pypdf and ReportLab BSD attribution")
+    notice_markers = required_markers + (
+        "Copyright (c) 2006-2008, Mathieu Fenniak",
+        "Copyright (c) 2000-2024, ReportLab Inc.",
+        "Redistributions in binary form must reproduce the above copyright notice",
+    )
+    if notice and not all(marker in notice for marker in notice_markers):
         errors.append(
-            "THIRD_PARTY_NOTICES.md must document PyMuPDF licensing and its official source"
+            "THIRD_PARTY_NOTICES.md must document pypdf and ReportLab BSD attribution"
         )
 
 

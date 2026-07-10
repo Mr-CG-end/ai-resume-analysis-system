@@ -2,50 +2,98 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
-import pymupdf
+from pypdf import PdfReader, PdfWriter
+from reportlab import rl_config
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen.canvas import Canvas
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_DIRECTORY = REPOSITORY_ROOT / "backend" / "tests" / "fixtures"
-PAGE = pymupdf.paper_rect("a4")
-TEXT_RECT = pymupdf.Rect(64, 72, PAGE.width - 64, PAGE.height - 72)
 FIXTURE_PASSWORD = "fixture-password"
+PAGE_WIDTH, PAGE_HEIGHT = A4
+rl_config.useA85 = 0
 
 
-def _new_document() -> pymupdf.Document:
-    document = pymupdf.open()
-    document.set_metadata({})
-    return document
+def _render_text_pages(pages: tuple[str, ...]) -> bytes:
+    output = BytesIO()
+    document = Canvas(output, pagesize=A4, pageCompression=1, invariant=1)
+    document.setAuthor("")
+    document.setCreator("")
+    document.setKeywords("")
+    document.setSubject("")
+    document.setTitle("")
+    for page_text in pages:
+        text = document.beginText(64, PAGE_HEIGHT - 72)
+        text.setFont("Helvetica", 11)
+        text.setLeading(15)
+        for line in page_text.splitlines():
+            text.textLine(line)
+        document.drawText(text)
+        document.showPage()
+    document.save()
+    return output.getvalue()
 
 
-def _add_text_page(document: pymupdf.Document, text: str) -> None:
-    page = document.new_page(width=PAGE.width, height=PAGE.height)
-    remaining = page.insert_textbox(
-        TEXT_RECT,
-        text,
-        fontname="helv",
-        fontsize=11,
-        lineheight=1.35,
+def _render_scan_page() -> bytes:
+    output = BytesIO()
+    document = Canvas(output, pagesize=A4, pageCompression=1, invariant=1)
+    width, height = 64, 80
+    pixels = bytearray()
+    for y in range(height):
+        for x in range(width):
+            shade = 40 if (y // 8) % 2 == 0 and 5 < x < 59 else 235
+            pixels.extend((shade, shade, shade))
+    image = BytesIO(f"P6\n{width} {height}\n255\n".encode() + bytes(pixels))
+    document.drawImage(
+        ImageReader(image),
+        64,
+        PAGE_HEIGHT - 360,
+        width=PAGE_WIDTH - 128,
+        height=288,
     )
-    if remaining < 0:
-        raise ValueError("fixture text does not fit on one page")
+    document.showPage()
+    document.save()
+    return output.getvalue()
 
 
-def _save(
-    document: pymupdf.Document,
+def _save_pdf(
+    source: bytes,
     output_directory: Path,
     name: str,
-    **options: object,
+    *,
+    encrypted: bool = False,
 ) -> None:
-    destination = output_directory / name
-    document.save(destination, garbage=4, clean=True, deflate=True, **options)
-    document.close()
+    reader = PdfReader(BytesIO(source), strict=True)
+    writer = PdfWriter()
+    writer.append_pages_from_reader(reader)
+    writer.metadata = None
+    if encrypted:
+        writer.encrypt(
+            user_password=FIXTURE_PASSWORD,
+            owner_password=FIXTURE_PASSWORD,
+            algorithm="RC4-128",
+            permissions_flag=0,
+        )
+    output = BytesIO()
+    writer.write(output)
+    pdf = output.getvalue()
+    xref_start = pdf.rfind(b"\nxref\n") + 1
+    trailer_start = pdf.find(b"trailer\n", xref_start)
+    if xref_start == 0 or trailer_start < 0:
+        raise ValueError("generated fixture has no classic cross-reference table")
+    xref = pdf[xref_start:trailer_start]
+    clean_xref = xref.replace(b" n \n", b" n\n").replace(b" f \n", b" f\n")
+    (output_directory / name).write_bytes(
+        pdf[:xref_start] + clean_xref + pdf[trailer_start:]
+    )
 
 
 def _generate_valid_resume(output_directory: Path) -> None:
-    document = _new_document()
     pages = (
         "PAGE ONE - PROFILE\n"
         "Demo Candidate\n"
@@ -62,15 +110,11 @@ def _generate_valid_resume(output_directory: Path) -> None:
         "Project: Synthetic Resume Analyzer\n"
         "All people, organizations, and experience in this fixture are fictional.",
     )
-    for text in pages:
-        _add_text_page(document, text)
-    _save(document, output_directory, "resume-valid-3-pages.pdf")
+    _save_pdf(_render_text_pages(pages), output_directory, "resume-valid-3-pages.pdf")
 
 
 def _generate_missing_address_resume(output_directory: Path) -> None:
-    document = _new_document()
-    _add_text_page(
-        document,
+    pages = (
         "MISSING ADDRESS FIXTURE\n"
         "Demo Candidate\n"
         "Phone: 13800138000\n"
@@ -78,52 +122,37 @@ def _generate_missing_address_resume(output_directory: Path) -> None:
         "Skills: Python, FastAPI\n"
         "This synthetic profile intentionally omits location details.",
     )
-    _save(document, output_directory, "resume-missing-address.pdf")
+    _save_pdf(_render_text_pages(pages), output_directory, "resume-missing-address.pdf")
 
 
 def _generate_repeated_header_resume(output_directory: Path) -> None:
-    document = _new_document()
     bodies = (
         "SECTION ONE\nSynthetic profile summary and core skills.",
         "SECTION TWO\nFictional work history and measurable outcomes.",
         "SECTION THREE\nSynthetic education and project details.",
     )
-    for page_number, body in enumerate(bodies, start=1):
-        _add_text_page(
-            document,
+    pages = tuple(
+        (
             "DEMO CANDIDATE - CONFIDENTIAL TEST FIXTURE\n"
             f"{body}\n"
             "CANONICAL RESUME FIXTURE\n"
-            f"Page {page_number} of {len(bodies)}",
+            f"Page {page_number} of {len(bodies)}"
         )
-    _save(document, output_directory, "resume-repeated-header.pdf")
+        for page_number, body in enumerate(bodies, start=1)
+    )
+    _save_pdf(_render_text_pages(pages), output_directory, "resume-repeated-header.pdf")
 
 
 def _generate_scan_only_resume(output_directory: Path) -> None:
-    document = _new_document()
-    page = document.new_page(width=PAGE.width, height=PAGE.height)
-    width, height = 64, 80
-    pixels = bytearray()
-    for y in range(height):
-        for x in range(width):
-            shade = 40 if (y // 8) % 2 == 0 and 5 < x < 59 else 235
-            pixels.extend((shade, shade, shade))
-    image = f"P6\n{width} {height}\n255\n".encode() + bytes(pixels)
-    page.insert_image(TEXT_RECT, stream=image)
-    _save(document, output_directory, "resume-scan-only.pdf")
+    _save_pdf(_render_scan_page(), output_directory, "resume-scan-only.pdf")
 
 
 def _generate_encrypted_resume(output_directory: Path) -> None:
-    document = _new_document()
-    _add_text_page(document, "ENCRYPTED SYNTHETIC RESUME FIXTURE")
-    _save(
-        document,
+    _save_pdf(
+        _render_text_pages(("ENCRYPTED SYNTHETIC RESUME FIXTURE",)),
         output_directory,
         "resume-encrypted.pdf",
-        encryption=pymupdf.PDF_ENCRYPT_AES_256,
-        owner_pw=FIXTURE_PASSWORD,
-        user_pw=FIXTURE_PASSWORD,
-        permissions=0,
+        encrypted=True,
     )
 
 

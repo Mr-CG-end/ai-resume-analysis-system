@@ -1,6 +1,7 @@
 from typing import Annotated, Literal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 Month = Annotated[str, StringConstraints(pattern=r"^\d{4}-(?:0[1-9]|1[0-2])$")]
 EducationEndDate = Annotated[
@@ -64,3 +65,12 @@ class ResumeSnapshot(ContractModel):
     warnings: list[WarningCode] = Field(default_factory=list)
     degraded: bool
     cached: bool
+
+    @field_validator("resume_id")
+    @classmethod
+    def resume_id_is_canonical_uuid4(cls, value: str) -> str:
+        identifier = value.removeprefix("res_")
+        parsed = UUID(identifier)
+        if parsed.version != 4 or identifier != str(parsed):
+            raise ValueError("resume_id must contain a canonical UUIDv4")
+        return value

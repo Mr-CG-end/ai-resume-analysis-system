@@ -30,7 +30,7 @@ _PAGE_NUMBER = re.compile(
     r"第\s*\d+\s*页(?:\s*[/／]\s*共?\s*\d+\s*页?)?"
     r"|page\s*\d+(?:\s*(?:of|/)\s*\d+)?"
     r"|\d+\s*[/／]\s*\d+"
-    r"|[1-9]\d?"
+    r"|(?:[1-9]|[12]\d|30)"
     r")",
     re.IGNORECASE,
 )
@@ -138,6 +138,7 @@ def parse_pdf(
 ) -> ParsedPdf:
     """Validate and parse an in-memory PDF without persisting its contents."""
 
+    raw_max_chars = max(max_chars, 0) * 2
     actual_bytes = len(pdf_bytes)
     if actual_bytes > max_bytes:
         raise PdfTooLargeError(details={"max_bytes": max_bytes, "actual_bytes": actual_bytes})
@@ -168,7 +169,7 @@ def parse_pdf(
             for page in document:
                 page_text = page.get_text("text", sort=True)
                 raw_character_count += len(page_text)
-                if raw_character_count > max_chars:
+                if raw_character_count > raw_max_chars:
                     raise PdfTextTooLongError(
                         details={"max_chars": max_chars, "actual_chars": raw_character_count}
                     )

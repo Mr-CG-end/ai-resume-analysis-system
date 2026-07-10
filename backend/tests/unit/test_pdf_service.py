@@ -196,6 +196,26 @@ def test_rejects_cleaned_text_over_limit_without_truncation() -> None:
     assert captured.value.details == {"max_chars": 5, "actual_chars": 6}
 
 
+def test_accepts_raw_text_over_business_limit_when_cleaned_text_fits() -> None:
+    pdf_bytes = make_pdf(["Resume\nAlpha", "Resume\nGamma"])
+
+    with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
+        raw_character_count = sum(
+            len(page.get_text("text", sort=True)) for page in document
+        )
+
+    result = parse_pdf(
+        pdf_bytes,
+        filename="resume.pdf",
+        content_type="application/pdf",
+        max_chars=15,
+    )
+
+    assert raw_character_count == 24
+    assert result.cleaned_text == "Alpha\n\nGamma"
+    assert result.character_count == 12
+
+
 def test_stops_extracting_when_raw_character_budget_is_exceeded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -205,7 +225,7 @@ def test_stops_extracting_when_raw_character_budget_is_exceeded(
         def get_text(self, output: str, *, sort: bool) -> str:
             nonlocal calls
             calls += 1
-            return "A" * 101
+            return "A" * 201
 
     class LargeDocument:
         needs_pass = False
@@ -235,7 +255,49 @@ def test_stops_extracting_when_raw_character_budget_is_exceeded(
         )
 
     assert calls == 1
-    assert captured.value.details == {"max_chars": 100, "actual_chars": 101}
+    assert captured.value.details == {"max_chars": 100, "actual_chars": 201}
+
+
+@pytest.mark.parametrize("max_chars", [0, -1])
+def test_raw_character_budget_handles_non_positive_business_limits(
+    monkeypatch: pytest.MonkeyPatch, max_chars: int
+) -> None:
+    calls = 0
+
+    class Page:
+        def get_text(self, output: str, *, sort: bool) -> str:
+            nonlocal calls
+            calls += 1
+            return "A"
+
+    class Document:
+        needs_pass = False
+        is_repaired = False
+        page_count = 2
+
+        def __enter__(self) -> Document:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def __iter__(self) -> Iterator[Page]:
+            return iter([Page(), Page()])
+
+        def xref_get_key(self, xref: int, key: str) -> tuple[str, str]:
+            return ("null", "null")
+
+    monkeypatch.setattr(pymupdf, "open", lambda **kwargs: Document())
+
+    with pytest.raises(PdfTextTooLongError):
+        parse_pdf(
+            b"%PDF-placeholder",
+            filename="resume.pdf",
+            content_type="application/pdf",
+            max_chars=max_chars,
+        )
+
+    assert calls == 1
 
 
 def test_clean_pages_normalizes_whitespace_and_repeated_boundaries() -> None:
@@ -287,6 +349,18 @@ def test_clean_pages_only_removes_conservative_bare_page_numbers() -> None:
     ]
 
     assert clean_pages(pages) == "2024\nExperience\n\n2025\nEducation\n\n13800138000\nProjects"
+
+
+def test_clean_pages_preserves_bare_numbers_above_page_limit() -> None:
+    pages = ["31\nExperience\n30", "99\nEducation\n29"]
+
+    assert clean_pages(pages) == "31\nExperience\n\n99\nEducation"
+
+
+def test_clean_pages_still_removes_explicit_page_number_formats() -> None:
+    pages = ["Page 31 of 99\nExperience", "Education\n31 / 99"]
+
+    assert clean_pages(pages) == "Experience\n\nEducation"
 
 
 def test_clean_pages_does_not_treat_single_page_boundaries_as_repeated() -> None:

@@ -18,7 +18,9 @@ from app.domain.errors import (
 from app.services.pdf import clean_pages, parse_pdf
 
 
-def make_pdf(pages: list[str], *, encrypted: bool = False) -> bytes:
+def make_pdf(
+    pages: list[str], *, encrypted: bool = False, empty_user_password: bool = False
+) -> bytes:
     document = pymupdf.open()
     for text in pages:
         page = document.new_page()
@@ -29,7 +31,7 @@ def make_pdf(pages: list[str], *, encrypted: bool = False) -> bytes:
         options = {
             "encryption": pymupdf.PDF_ENCRYPT_AES_256,
             "owner_pw": "owner-secret",
-            "user_pw": "user-secret",
+            "user_pw": "" if empty_user_password else "user-secret",
         }
     try:
         return document.tobytes(**options)
@@ -71,12 +73,12 @@ def test_rejects_oversized_bytes_before_opening_pdf(monkeypatch: pytest.MonkeyPa
 
 def test_accepts_exact_size_limit() -> None:
     original = make_pdf(["Valid resume text"])
-    padded = original + b"\0" * (10_485_760 - len(original))
 
     result = parse_pdf(
-        padded,
+        original,
         filename="resume.PDF",
         content_type="application/pdf; charset=binary",
+        max_bytes=len(original),
     )
 
     assert result.cleaned_text == "Valid resume text"
@@ -115,6 +117,15 @@ def test_rejects_encrypted_pdf() -> None:
         )
 
 
+def test_rejects_encrypted_pdf_with_empty_user_password() -> None:
+    with pytest.raises(PdfEncryptedError):
+        parse_pdf(
+            make_pdf(["Secret text"], encrypted=True, empty_user_password=True),
+            filename="resume.pdf",
+            content_type="application/pdf",
+        )
+
+
 @pytest.mark.parametrize("pdf_bytes", [b"%PDF-not-valid", b"%PDF-1.7\ntruncated"])
 def test_maps_known_damaged_pdf_to_corrupted(pdf_bytes: bytes) -> None:
     with pytest.raises(PdfCorruptedError):
@@ -132,6 +143,7 @@ def test_rejects_zero_page_pdf_as_having_no_extractable_text(
 ) -> None:
     class EmptyDocument:
         needs_pass = False
+        is_repaired = False
         page_count = 0
 
         def __enter__(self) -> EmptyDocument:
@@ -143,9 +155,32 @@ def test_rejects_zero_page_pdf_as_having_no_extractable_text(
         def __iter__(self) -> Iterator[object]:
             return iter(())
 
+        def xref_get_key(self, xref: int, key: str) -> tuple[str, str]:
+            return ("null", "null")
+
     monkeypatch.setattr(pymupdf, "open", lambda **kwargs: EmptyDocument())
 
     with pytest.raises(PdfNoExtractableTextError):
+        parse_pdf(b"%PDF-placeholder", filename="resume.pdf", content_type="application/pdf")
+
+
+def test_rejects_repaired_pdf(monkeypatch: pytest.MonkeyPatch) -> None:
+    class RepairedDocument:
+        needs_pass = False
+        is_repaired = True
+
+        def __enter__(self) -> RepairedDocument:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def xref_get_key(self, xref: int, key: str) -> tuple[str, str]:
+            return ("null", "null")
+
+    monkeypatch.setattr(pymupdf, "open", lambda **kwargs: RepairedDocument())
+
+    with pytest.raises(PdfCorruptedError):
         parse_pdf(b"%PDF-placeholder", filename="resume.pdf", content_type="application/pdf")
 
 
@@ -159,6 +194,48 @@ def test_rejects_cleaned_text_over_limit_without_truncation() -> None:
         )
 
     assert captured.value.details == {"max_chars": 5, "actual_chars": 6}
+
+
+def test_stops_extracting_when_raw_character_budget_is_exceeded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    class LargePage:
+        def get_text(self, output: str, *, sort: bool) -> str:
+            nonlocal calls
+            calls += 1
+            return "A" * 101
+
+    class LargeDocument:
+        needs_pass = False
+        is_repaired = False
+        page_count = 30
+
+        def __enter__(self) -> LargeDocument:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def __iter__(self) -> Iterator[LargePage]:
+            return iter([LargePage()] * 30)
+
+        def xref_get_key(self, xref: int, key: str) -> tuple[str, str]:
+            return ("null", "null")
+
+    monkeypatch.setattr(pymupdf, "open", lambda **kwargs: LargeDocument())
+
+    with pytest.raises(PdfTextTooLongError) as captured:
+        parse_pdf(
+            b"%PDF-placeholder",
+            filename="resume.pdf",
+            content_type="application/pdf",
+            max_chars=100,
+        )
+
+    assert calls == 1
+    assert captured.value.details == {"max_chars": 100, "actual_chars": 101}
 
 
 def test_clean_pages_normalizes_whitespace_and_repeated_boundaries() -> None:
@@ -181,6 +258,44 @@ def test_clean_pages_preserves_body_order_and_non_boundary_duplicates() -> None:
     assert clean_pages(pages) == ("Experience\nPython\n\nPython\nEducation\n\nProjects\nPython")
 
 
+def test_clean_pages_keeps_header_and_footer_repetition_separate() -> None:
+    pages = [
+        "Shared line\nFirst body\nUnique footer",
+        "Unique header\nSecond body\nShared line",
+    ]
+
+    assert clean_pages(pages) == (
+        "Shared line\nFirst body\nUnique footer\n\n"
+        "Unique header\nSecond body\nShared line"
+    )
+
+
+def test_clean_pages_removes_repeated_second_boundary_lines_and_dynamic_page_numbers() -> None:
+    pages = [
+        "Resume\nConfidential\nAlpha\nCompany footer\n1",
+        "Resume\nConfidential\nBeta\nCompany footer\n2",
+        "Resume\nConfidential\nGamma\nCompany footer\n3",
+    ]
+
+    assert clean_pages(pages) == "Alpha\n\nBeta\n\nGamma"
+
+
+def test_clean_pages_only_removes_conservative_bare_page_numbers() -> None:
+    pages = [
+        "2024\nExperience\n1",
+        "2025\nEducation\n2",
+        "13800138000\nProjects\n3",
+    ]
+
+    assert clean_pages(pages) == "2024\nExperience\n\n2025\nEducation\n\n13800138000\nProjects"
+
+
+def test_clean_pages_does_not_treat_single_page_boundaries_as_repeated() -> None:
+    assert clean_pages(["Summary\nPython developer\nShanghai"]) == (
+        "Summary\nPython developer\nShanghai"
+    )
+
+
 def test_unknown_extraction_exception_is_not_swallowed(monkeypatch: pytest.MonkeyPatch) -> None:
     exited = False
 
@@ -190,6 +305,7 @@ def test_unknown_extraction_exception_is_not_swallowed(monkeypatch: pytest.Monke
 
     class BrokenDocument:
         needs_pass = False
+        is_repaired = False
         page_count = 1
 
         def __enter__(self) -> BrokenDocument:
@@ -202,6 +318,9 @@ def test_unknown_extraction_exception_is_not_swallowed(monkeypatch: pytest.Monke
 
         def __iter__(self) -> Iterator[BrokenPage]:
             yield BrokenPage()
+
+        def xref_get_key(self, xref: int, key: str) -> tuple[str, str]:
+            return ("null", "null")
 
     monkeypatch.setattr(pymupdf, "open", lambda **kwargs: BrokenDocument())
 
@@ -221,6 +340,7 @@ def test_extraction_uses_sorted_text(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class TrackingDocument:
         needs_pass = False
+        is_repaired = False
         page_count = 1
 
         def __enter__(self) -> TrackingDocument:
@@ -231,6 +351,9 @@ def test_extraction_uses_sorted_text(monkeypatch: pytest.MonkeyPatch) -> None:
 
         def __iter__(self) -> Iterator[TrackingPage]:
             yield TrackingPage()
+
+        def xref_get_key(self, xref: int, key: str) -> tuple[str, str]:
+            return ("null", "null")
 
     monkeypatch.setattr(pymupdf, "open", lambda **kwargs: TrackingDocument())
 

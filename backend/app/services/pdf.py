@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 import re
 from collections import Counter
 from collections.abc import Sequence
@@ -31,6 +30,7 @@ _PAGE_NUMBER = re.compile(
     r"第\s*\d+\s*页(?:\s*[/／]\s*共?\s*\d+\s*页?)?"
     r"|page\s*\d+(?:\s*(?:of|/)\s*\d+)?"
     r"|\d+\s*[/／]\s*\d+"
+    r"|[1-9]\d?"
     r")",
     re.IGNORECASE,
 )
@@ -41,11 +41,11 @@ def _normalize_page(page_text: str) -> list[str]:
     return [_HORIZONTAL_WHITESPACE.sub(" ", line).strip() for line in normalized.split("\n")]
 
 
-def _boundary_indices(lines: Sequence[str]) -> tuple[int | None, int | None]:
+def _boundary_indices(lines: Sequence[str], *, from_start: bool) -> list[int]:
     populated = [index for index, line in enumerate(lines) if line]
-    if not populated:
-        return None, None
-    return populated[0], populated[-1]
+    if not from_start:
+        populated.reverse()
+    return populated[:2]
 
 
 def _is_page_number(line: str) -> bool:
@@ -71,26 +71,47 @@ def clean_pages(pages: Sequence[str]) -> str:
     """Conservatively normalize pages and remove repeated outer boundary lines."""
 
     normalized_pages = [_normalize_page(page) for page in pages]
-    boundary_counts: Counter[str] = Counter()
-    boundaries: list[tuple[int | None, int | None]] = []
+    header_counts = (Counter[str](), Counter[str]())
+    footer_counts = (Counter[str](), Counter[str]())
+    boundaries: list[tuple[list[int], list[int]]] = []
 
     for lines in normalized_pages:
-        first, last = _boundary_indices(lines)
-        boundaries.append((first, last))
-        candidates = {lines[index].casefold() for index in (first, last) if index is not None}
-        boundary_counts.update(candidates)
+        headers = _boundary_indices(lines, from_start=True)
+        footers = _boundary_indices(lines, from_start=False)
+        boundaries.append((headers, footers))
+        for depth, index in enumerate(headers):
+            header_counts[depth].update([lines[index].casefold()])
+        for depth, index in enumerate(footers):
+            footer_counts[depth].update([lines[index].casefold()])
 
-    repeat_threshold = max(2, math.ceil(len(normalized_pages) * 0.6))
-    repeated = {line for line, count in boundary_counts.items() if count >= repeat_threshold}
+    repeat_threshold = max(2, (len(normalized_pages) * 3 + 4) // 5)
+    repeated_headers = tuple(
+        {
+            line
+            for line, count in counts.items()
+            if count >= (repeat_threshold if depth == 0 else max(2, len(normalized_pages)))
+        }
+        for depth, counts in enumerate(header_counts)
+    )
+    repeated_footers = tuple(
+        {
+            line
+            for line, count in counts.items()
+            if count >= (repeat_threshold if depth == 0 else max(2, len(normalized_pages)))
+        }
+        for depth, counts in enumerate(footer_counts)
+    )
 
     cleaned: list[str] = []
-    for lines, (first, last) in zip(normalized_pages, boundaries, strict=True):
+    for lines, (headers, footers) in zip(normalized_pages, boundaries, strict=True):
         removable: set[int] = set()
-        for index in (first, last):
-            if index is None:
-                continue
+        for depth, index in enumerate(headers):
             line = lines[index]
-            if line.casefold() in repeated or _is_page_number(line):
+            if line.casefold() in repeated_headers[depth] or _is_page_number(line):
+                removable.add(index)
+        for depth, index in enumerate(footers):
+            line = lines[index]
+            if line.casefold() in repeated_footers[depth] or _is_page_number(line):
                 removable.add(index)
         page = _collapse_blank_lines(
             [line for index, line in enumerate(lines) if index not in removable]
@@ -99,6 +120,11 @@ def clean_pages(pages: Sequence[str]) -> str:
             cleaned.append(page)
 
     return "\n\n".join(cleaned)
+
+
+def _has_encryption_dictionary(document: pymupdf.Document) -> bool:
+    value_type: str = document.xref_get_key(-1, "Encrypt")[0]  # type: ignore[no-untyped-call]
+    return value_type != "null"
 
 
 def parse_pdf(
@@ -127,15 +153,26 @@ def parse_pdf(
         with pymupdf.open(  # type: ignore[no-untyped-call]
             stream=pdf_bytes, filetype="pdf"
         ) as document:
-            if document.needs_pass:
+            if _has_encryption_dictionary(document) or document.needs_pass:
                 raise PdfEncryptedError()
+            if document.is_repaired:
+                raise PdfCorruptedError()
 
             page_count = document.page_count
             if page_count > max_pages:
                 raise PdfPageLimitExceededError(
                     details={"max_pages": max_pages, "actual_pages": page_count}
                 )
-            pages = [page.get_text("text", sort=True) for page in document]
+            pages: list[str] = []
+            raw_character_count = 0
+            for page in document:
+                page_text = page.get_text("text", sort=True)
+                raw_character_count += len(page_text)
+                if raw_character_count > max_chars:
+                    raise PdfTextTooLongError(
+                        details={"max_chars": max_chars, "actual_chars": raw_character_count}
+                    )
+                pages.append(page_text)
     except pymupdf.FileDataError as error:
         raise PdfCorruptedError() from error
 

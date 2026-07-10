@@ -153,6 +153,7 @@ def test_redis_port_is_bound_to_loopback() -> None:
 def test_python_and_production_lock_contract_are_exact() -> None:
     pyproject = (REPOSITORY_ROOT / "backend/pyproject.toml").read_text(encoding="utf-8")
     assert 'requires-python = "==3.12.13"' in pyproject
+    assert '"httpx>=0.28,<1.0"' in pyproject
     assert '"pypdf>=6.14.2,<7"' in pyproject
     assert '"python-multipart>=0.0.20,<1.0"' in pyproject
     assert '"uvicorn>=0.34,<1.0"' in pyproject
@@ -198,7 +199,6 @@ def test_python_and_production_lock_contract_are_exact() -> None:
         assert "--hash=sha256:" in lock[start:end]
 
     dev_only = (
-        "httpx==",
         "mypy==",
         "pip-tools==",
         "pytest==",
@@ -211,7 +211,7 @@ def test_python_and_production_lock_contract_are_exact() -> None:
         re.sub(r"[-_.]+", "-", re.match(r"^[A-Za-z0-9_.-]+", line).group()).lower()
         for line in requirement_lines
     }
-    assert {"pypdf", "python-multipart", "uvicorn"}.issubset(locked_names)
+    assert {"httpx", "pypdf", "python-multipart", "uvicorn"}.issubset(locked_names)
     assert (
         not {
             "cryptography",

@@ -418,6 +418,7 @@ def _validate_pyproject(pyproject: str, errors: list[str]) -> None:
         else {}
     )
     expected_runtime_requirements = {
+        "httpx": "httpx>=0.28,<1.0",
         "pypdf": "pypdf>=6.14.2,<7",
         "python-multipart": "python-multipart>=0.0.20,<1.0",
         "uvicorn": "uvicorn>=0.34,<1.0",
@@ -428,7 +429,7 @@ def _validate_pyproject(pyproject: str, errors: list[str]) -> None:
     ):
         errors.append(
             "backend/pyproject.toml runtime dependencies must include the bounded "
-            "pypdf, python-multipart and minimal uvicorn requirements"
+            "httpx, pypdf, python-multipart and minimal uvicorn requirements"
         )
     if "reportlab" in runtime_requirements:
         errors.append(
@@ -495,6 +496,7 @@ def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
     locked_names = {_normalize_package_name(item) for item in requirement_lines}
     required_runtime_names = {
         "fastapi",
+        "httpx",
         "pydantic-settings",
         "pypdf",
         "python-multipart",
@@ -523,7 +525,6 @@ def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
             "backend/requirements.lock must not include uvicorn standard-only dependencies"
         )
     forbidden_dev_names = {
-        "httpx",
         "mypy",
         "pip-tools",
         "pytest",

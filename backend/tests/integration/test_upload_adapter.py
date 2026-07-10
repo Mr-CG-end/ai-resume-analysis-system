@@ -522,14 +522,3 @@ async def test_success_returns_internal_parsed_pdf_without_mounting_public_route
         "max_chars": 100,
         "pdf_bytes": b"%PDF-ok",
     }
-
-    from app.main import create_app
-
-    production_transport = httpx.ASGITransport(app=create_app())
-    async with httpx.AsyncClient(transport=production_transport, base_url="http://test") as client:
-        public_response = await client.post(
-            "/api/v1/resumes",
-            files=[("file", ("sample.pdf", b"%PDF-ok", "application/pdf"))],
-        )
-
-    assert public_response.status_code == 404

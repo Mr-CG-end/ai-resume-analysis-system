@@ -200,9 +200,7 @@ def test_accepts_raw_text_over_business_limit_when_cleaned_text_fits() -> None:
     pdf_bytes = make_pdf(["Resume\nAlpha", "Resume\nGamma"])
 
     with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
-        raw_character_count = sum(
-            len(page.get_text("text", sort=True)) for page in document
-        )
+        raw_character_count = sum(len(page.get_text("text", sort=True)) for page in document)
 
     result = parse_pdf(
         pdf_bytes,

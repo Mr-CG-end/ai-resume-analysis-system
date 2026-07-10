@@ -39,8 +39,16 @@ _PYPDF_OUTPUT_LIMITS = (
     "RUN_LENGTH_MAX_OUTPUT_LENGTH",
     "ZLIB_MAX_OUTPUT_LENGTH",
 )
-for _limit_name in _PYPDF_OUTPUT_LIMITS:
-    setattr(pypdf.filters, _limit_name, MAX_PDF_CONTENT_BYTES)
+
+
+def _configure_pypdf_output_limits() -> None:
+    for limit_name in _PYPDF_OUTPUT_LIMITS:
+        if not hasattr(pypdf.filters, limit_name):
+            raise RuntimeError(f"Unsupported pypdf release: missing {limit_name}")
+        setattr(pypdf.filters, limit_name, MAX_PDF_CONTENT_BYTES)
+
+
+_configure_pypdf_output_limits()
 
 _HORIZONTAL_WHITESPACE = re.compile(r"[\t\f\v ]+")
 _VALID_TEXT = re.compile(r"[A-Za-z0-9\u3400-\u4dbf\u4e00-\u9fff]")
@@ -212,10 +220,15 @@ def parse_pdf(
 
     try:
         with BytesIO(pdf_bytes) as stream:
-            reader = PdfReader(stream, strict=True)
-            if reader.is_encrypted:
-                raise PdfEncryptedError()
-            pages, page_count = _extract_pages(reader, max_pages=max_pages)
+            reader: PdfReader | None = None
+            try:
+                reader = PdfReader(stream, strict=True)
+                if reader.is_encrypted:
+                    raise PdfEncryptedError()
+                pages, page_count = _extract_pages(reader, max_pages=max_pages)
+            finally:
+                if reader is not None:
+                    reader.close()
     except LimitReachedError as error:
         raise _processing_limit_error() from error
     except (ParseError, PdfReadError) as error:

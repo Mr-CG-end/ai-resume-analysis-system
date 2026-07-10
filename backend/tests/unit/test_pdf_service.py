@@ -84,8 +84,13 @@ def install_fake_reader(
     pages: list[FakePage],
     *,
     encrypted: bool = False,
+    on_close: Callable[[], None] | None = None,
 ) -> None:
-    reader = SimpleNamespace(is_encrypted=encrypted, pages=pages)
+    reader = SimpleNamespace(
+        is_encrypted=encrypted,
+        pages=pages,
+        close=on_close or (lambda: None),
+    )
     monkeypatch.setattr(pdf_service, "PdfReader", lambda stream, strict: reader)
 
 
@@ -146,7 +151,7 @@ def test_extracts_pages_in_order_and_returns_typed_metadata() -> None:
 
 def test_uses_strict_reader_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     observed: list[bool] = []
-    reader = SimpleNamespace(is_encrypted=False, pages=[FakePage("Resume")])
+    reader = SimpleNamespace(is_encrypted=False, pages=[FakePage("Resume")], close=lambda: None)
 
     def tracking_reader(stream: BytesIO, strict: bool) -> object:
         observed.append(strict)
@@ -319,6 +324,62 @@ def test_stops_when_raw_character_budget_is_exceeded(monkeypatch: pytest.MonkeyP
 def test_configures_all_pypdf_stream_output_limits_to_fifty_mib() -> None:
     for limit_name in pdf_service._PYPDF_OUTPUT_LIMITS:
         assert getattr(pypdf.filters, limit_name) == 50 * 1024 * 1024
+
+
+def test_fails_fast_when_supported_pypdf_limit_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    limit_name = pdf_service._PYPDF_OUTPUT_LIMITS[0]
+    monkeypatch.delattr(pypdf.filters, limit_name)
+
+    with pytest.raises(RuntimeError, match=limit_name):
+        pdf_service._configure_pypdf_output_limits()
+
+
+def test_maps_real_compressed_stream_limit_to_processing_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pdf_bytes = make_pdf(["A" * 2_000])
+    monkeypatch.setattr(pypdf.filters, "ZLIB_MAX_OUTPUT_LENGTH", 64)
+
+    with pytest.raises(PdfProcessingLimitExceededError):
+        parse_pdf(pdf_bytes, filename="resume.pdf", content_type="application/pdf")
+
+
+def test_closes_reader_after_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    closed = False
+
+    def mark_closed() -> None:
+        nonlocal closed
+        closed = True
+
+    install_fake_reader(monkeypatch, [FakePage("Alpha")], on_close=mark_closed)
+
+    parse_pdf(b"%PDF-placeholder", filename="resume.pdf", content_type="application/pdf")
+
+    assert closed is True
+
+
+def test_closes_reader_when_extraction_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    closed = False
+
+    def mark_closed() -> None:
+        nonlocal closed
+        closed = True
+
+    def fail_extraction() -> None:
+        raise RuntimeError("programming failure")
+
+    install_fake_reader(
+        monkeypatch,
+        [FakePage("Alpha", on_extract=fail_extraction)],
+        on_close=mark_closed,
+    )
+
+    with pytest.raises(RuntimeError, match="programming failure"):
+        parse_pdf(b"%PDF-placeholder", filename="resume.pdf", content_type="application/pdf")
+
+    assert closed is True
 
 
 def test_clean_pages_normalizes_whitespace_and_repeated_boundaries() -> None:

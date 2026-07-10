@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import gzip
 import json
 import time
 from collections.abc import AsyncIterator, Callable
@@ -66,8 +65,10 @@ class ClosingByteStream(httpx.AsyncByteStream):
     def __init__(self, chunks: list[bytes]) -> None:
         self._chunks = chunks
         self.closed = False
+        self.iterated = False
 
     async def __aiter__(self) -> AsyncIterator[bytes]:
+        self.iterated = True
         for chunk in self._chunks:
             await asyncio.sleep(0)
             yield chunk
@@ -129,6 +130,7 @@ async def test_extract_posts_strict_prompt_and_validates_payload() -> None:
     request = requests[0]
     assert str(request.url) == "https://ai.example.test/v1/chat/completions"
     assert request.headers["Authorization"] == "Bearer secret-test-key"
+    assert request.headers["Accept-Encoding"] == "identity"
     assert request.extensions["timeout"] == {
         "connect": 0.5,
         "read": 0.5,
@@ -209,7 +211,7 @@ async def test_extract_retries_invalid_provider_response(
 
 
 @pytest.mark.asyncio
-async def test_extract_accepts_exactly_one_mib_decompressed_response_in_chunks() -> None:
+async def test_extract_accepts_exactly_one_mib_identity_response_in_chunks() -> None:
     body = _sized_completion(MAX_AI_RESPONSE_BYTES)
     stream = ClosingByteStream([body[:17], body[17:524_289], body[524_289:]])
 
@@ -225,16 +227,32 @@ async def test_extract_accepts_exactly_one_mib_decompressed_response_in_chunks()
 
 
 @pytest.mark.asyncio
-async def test_extract_retries_response_one_byte_over_decompressed_limit() -> None:
-    compressed = gzip.compress(_sized_completion(MAX_AI_RESPONSE_BYTES + 1))
+async def test_extract_retries_identity_response_one_byte_over_limit() -> None:
+    body = _sized_completion(MAX_AI_RESPONSE_BYTES + 1)
+    attempts = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(200, stream=ClosingByteStream([body]))
+
+    with pytest.raises(AiExtractionError, match="^AI profile extraction failed$"):
+        await OpenAiProfileExtractor(_settings(), transport=httpx.MockTransport(handler)).extract(
+            "resume"
+        )
+
+    assert attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_extract_rejects_compressed_response_before_reading_stream() -> None:
     attempts = 0
     streams: list[ClosingByteStream] = []
 
     def handler(_: httpx.Request) -> httpx.Response:
         nonlocal attempts
         attempts += 1
-        midpoint = len(compressed) // 2
-        stream = ClosingByteStream([compressed[:midpoint], compressed[midpoint:]])
+        stream = ClosingByteStream([b"small-compressed-payload"])
         streams.append(stream)
         return httpx.Response(
             200,
@@ -249,6 +267,7 @@ async def test_extract_retries_response_one_byte_over_decompressed_limit() -> No
 
     assert attempts == 2
     assert all(stream.closed for stream in streams)
+    assert not any(stream.iterated for stream in streams)
 
 
 @pytest.mark.asyncio

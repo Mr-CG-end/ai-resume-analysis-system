@@ -39,7 +39,7 @@ def _payload() -> AiProfilePayload:
             },
             "address": {
                 "value": "Example District, Sample City",
-                "evidence": "Address: Example District, Sample City",
+                "evidence": "Example District, Sample City",
             },
             "job_intention": {
                 "value": "Backend Engineer",
@@ -139,6 +139,7 @@ async def test_public_resume_route_returns_verified_snapshot() -> None:
     }
     assert body["profile"]["name"] == "Demo Candidate"
     assert body["profile"]["phone"] == "13800138000"
+    assert body["profile"]["address"] == "Example District, Sample City"
     assert body["profile"]["education"][0]["school"] == "Example Technical University"
     assert body["profile"]["projects"][0]["technologies"] == ["Python"]
     assert body["degraded"] is False

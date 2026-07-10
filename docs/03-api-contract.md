@@ -87,7 +87,7 @@ API 基础路径为 `/api/v1`，请求和响应使用 UTF-8。除文件上传外
 
 请求类型为 `multipart/form-data`，字段名固定为 `file`，且只能出现一个文件。前端校验只用于改善体验，服务端必须重复执行全部校验。
 
-阶段 3 将挂载本端点，并在 PDF 解析成功后完成真实 `CandidateProfile` 提取和 `ResumeSnapshot` 组装。当前路由基础分支先验收公共 Schema 与原始文件名传递；正式路由必须在档案提取服务接线后才提供成功响应，不得用空档案或伪造档案临时满足契约。
+阶段 3 已挂载本端点，并在 PDF 解析成功后完成真实 `CandidateProfile` 提取和 `ResumeSnapshot` 组装。AI 未配置或预期调用失败时返回规则降级档案，不得用空档案或伪造档案临时满足契约。
 
 成功时返回 `201 Created`，响应体必须是完整的 `ResumeSnapshot`：
 

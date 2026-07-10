@@ -265,8 +265,7 @@ def test_clean_pages_keeps_header_and_footer_repetition_separate() -> None:
     ]
 
     assert clean_pages(pages) == (
-        "Shared line\nFirst body\nUnique footer\n\n"
-        "Unique header\nSecond body\nShared line"
+        "Shared line\nFirst body\nUnique footer\n\nUnique header\nSecond body\nShared line"
     )
 
 

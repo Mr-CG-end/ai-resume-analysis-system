@@ -127,14 +127,16 @@ def test_rejects_oversized_bytes_before_opening_pdf(monkeypatch: pytest.MonkeyPa
 
 def test_accepts_exact_size_limit() -> None:
     original = make_pdf(["Valid resume text"])
+    filename = "resume final.PDF"
 
     result = parse_pdf(
         original,
-        filename="resume.PDF",
+        filename=filename,
         content_type="application/pdf; charset=binary",
         max_bytes=len(original),
     )
 
+    assert result.filename == filename
     assert result.cleaned_text == "Valid resume text"
 
 
@@ -143,6 +145,7 @@ def test_extracts_pages_in_order_and_returns_typed_metadata() -> None:
 
     result = parse_pdf(pdf_bytes, filename="resume.pdf", content_type="application/pdf")
 
+    assert result.filename == "resume.pdf"
     assert result.cleaned_text == "FIRST 2024\n\nSECOND Python\n\nTHIRD Redis"
     assert result.page_count == 3
     assert result.character_count == len(result.cleaned_text)

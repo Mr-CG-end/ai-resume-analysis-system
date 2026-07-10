@@ -87,9 +87,18 @@ API 基础路径为 `/api/v1`，请求和响应使用 UTF-8。除文件上传外
 
 请求类型为 `multipart/form-data`，字段名固定为 `file`，且只能出现一个文件。前端校验只用于改善体验，服务端必须重复执行全部校验。
 
-阶段 2 只提供可复用的 multipart 上传适配和内部 `ParsedPdf` 结果，不在正式应用挂载本端点的成功路径。阶段 3 完成真实 `CandidateProfile` 后，才挂载 `POST /api/v1/resumes` 并返回下述完整 `ResumeSnapshot`；任何阶段都不得用空档案或伪造档案临时满足成功契约。
+阶段 3 将挂载本端点，并在 PDF 解析成功后完成真实 `CandidateProfile` 提取和 `ResumeSnapshot` 组装。当前路由基础分支先验收公共 Schema 与原始文件名传递；正式路由必须在档案提取服务接线后才提供成功响应，不得用空档案或伪造档案临时满足契约。
 
-成功时返回 `201 Created`，响应体为 `ResumeSnapshot`。示例：
+成功时返回 `201 Created`，响应体必须是完整的 `ResumeSnapshot`：
+
+- `resume_id` 每次新分析生成一个 `res_{uuid4}`；阶段 3 不持久化该标识。
+- `document.filename` 原样使用通过扩展名校验的 multipart 文件名；页数和字符数来自同一次 PDF 解析结果。
+- `cleaned_text` 与 `document.character_count` 一致，长度为 1 至 100,000 字符，不得静默截断。
+- `profile` 的全部字段始终存在；缺失标量为 `null`，缺失数组为 `[]`。
+- 正常 AI 提取设置 `degraded=false`；规则降级设置 `degraded=true` 并包含 `ai_extraction_fallback`。
+- 阶段 3 固定 `cached=false`，缓存语义在阶段 5 实现。
+
+示例：
 
 ```json
 {

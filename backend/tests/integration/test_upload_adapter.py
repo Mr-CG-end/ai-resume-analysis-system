@@ -65,6 +65,7 @@ async def _post(
 
 def _parsed() -> ParsedPdf:
     return ParsedPdf(
+        filename="safe.pdf",
         cleaned_text="safe text",
         page_count=1,
         character_count=9,

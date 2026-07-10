@@ -242,6 +242,7 @@ def parse_pdf(
         raise PdfTextTooLongError(details={"max_chars": max_chars, "actual_chars": character_count})
 
     return ParsedPdf(
+        filename=filename,
         cleaned_text=cleaned_text,
         page_count=page_count,
         character_count=character_count,

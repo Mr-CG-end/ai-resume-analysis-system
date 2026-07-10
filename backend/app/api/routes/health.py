@@ -47,7 +47,7 @@ async def get_health(
     else:
         redis_status = "up" if await redis_ping(settings.redis_url) else "down"
 
-    if not settings.ai_api_key:
+    if not settings.ai_configured:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         overall_status: Literal["ok", "degraded", "unavailable"] = "unavailable"
         ai_status: Literal["configured", "unavailable"] = "unavailable"

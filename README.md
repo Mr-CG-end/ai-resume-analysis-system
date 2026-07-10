@@ -37,7 +37,7 @@ Copy-Item .env.example .env.local
 pnpm dev
 ```
 
-当前后端骨架的健康检查只读取 `AI_API_KEY`，仅在启用缓存时配置 `REDIS_URL`。CORS 白名单以及 `AI_BASE_URL`、`AI_MODEL` 等模型供应商配置将在下一项 API 集成任务中实现；当前版本尚未实现这些能力。前端 `.env.local` 只配置公开的 `VITE_API_BASE_URL`，不得包含任何密钥。
+后端仅在 `AI_API_KEY`、`AI_BASE_URL` 和 `AI_MODEL` 三项均配置时将 AI 健康状态报告为可用；单次模型调用默认超时 20 秒，可通过 `AI_TIMEOUT_SECONDS` 调整。模型接口采用 OpenAI 兼容的 `/chat/completions` 协议。仅在启用缓存时配置 `REDIS_URL`。CORS 白名单将在后续集成阶段实现。前端 `.env.local` 只配置公开的 `VITE_API_BASE_URL`，不得包含任何密钥。
 
 ## 验证
 

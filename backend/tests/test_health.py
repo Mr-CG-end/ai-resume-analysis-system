@@ -17,6 +17,17 @@ from app.main import app
 RedisPing = Callable[[str], Awaitable[bool]]
 
 
+def _configured_settings(**overrides: object) -> Settings:
+    values: dict[str, object] = {
+        "_env_file": None,
+        "ai_api_key": "test-key",
+        "ai_base_url": "https://ai.example.test/v1",
+        "ai_model": "test-model",
+    }
+    values.update(overrides)
+    return Settings(**values)
+
+
 async def _request_health(
     *,
     settings: Settings,
@@ -50,10 +61,34 @@ async def test_health_is_unavailable_when_ai_is_missing() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "settings",
+    [
+        Settings(_env_file=None, ai_api_key="test-key"),
+        Settings(
+            _env_file=None,
+            ai_api_key="test-key",
+            ai_base_url="https://ai.example.test/v1",
+        ),
+        Settings(
+            _env_file=None,
+            ai_api_key="test-key",
+            ai_model="test-model",
+        ),
+    ],
+)
+async def test_health_is_unavailable_when_ai_configuration_is_partial(
+    settings: Settings,
+) -> None:
+    response = await _request_health(settings=settings)
+
+    assert response.status_code == 503
+    assert response.json()["dependencies"]["ai"] == "unavailable"
+
+
+@pytest.mark.asyncio
 async def test_health_is_ok_when_ai_is_configured_and_redis_is_disabled() -> None:
-    response = await _request_health(
-        settings=Settings(_env_file=None, ai_api_key="test-key", redis_url=None)
-    )
+    response = await _request_health(settings=_configured_settings(redis_url=None))
 
     assert response.status_code == 200
     assert response.json() == {
@@ -69,11 +104,7 @@ async def test_health_reports_redis_up_after_successful_ping() -> None:
         return True
 
     response = await _request_health(
-        settings=Settings(
-            _env_file=None,
-            ai_api_key="test-key",
-            redis_url="redis://example.test:6379/0",
-        ),
+        settings=_configured_settings(redis_url="redis://example.test:6379/0"),
         redis_ping=redis_up,
     )
 
@@ -89,11 +120,7 @@ async def test_health_is_degraded_when_redis_ping_fails(redis_result: bool) -> N
         return redis_result
 
     response = await _request_health(
-        settings=Settings(
-            _env_file=None,
-            ai_api_key="test-key",
-            redis_url="redis://example.test:6379/0",
-        ),
+        settings=_configured_settings(redis_url="redis://example.test:6379/0"),
         redis_ping=redis_down,
     )
 
@@ -149,9 +176,7 @@ async def test_health_is_degraded_when_redis_url_is_empty_or_invalid(
 
     monkeypatch.setattr(health_module, "Redis", InvalidRedis)
 
-    response = await _request_health(
-        settings=Settings(_env_file=None, ai_api_key="test-key", redis_url=redis_url)
-    )
+    response = await _request_health(settings=_configured_settings(redis_url=redis_url))
 
     assert response.status_code == 200
     assert response.json()["status"] == "degraded"
@@ -161,7 +186,7 @@ async def test_health_is_degraded_when_redis_url_is_empty_or_invalid(
 @pytest.mark.asyncio
 async def test_request_id_echoes_safe_incoming_value() -> None:
     response = await _request_health(
-        settings=Settings(_env_file=None, ai_api_key="test-key"),
+        settings=_configured_settings(),
         request_id="req.Safe_value-123",
     )
 
@@ -171,9 +196,7 @@ async def test_request_id_echoes_safe_incoming_value() -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize("request_id", [None, "unsafe request id", "x" * 129])
 async def test_request_id_generates_uuid_when_missing_or_invalid(request_id: str | None) -> None:
-    response = await _request_health(
-        settings=Settings(_env_file=None, ai_api_key="test-key"), request_id=request_id
-    )
+    response = await _request_health(settings=_configured_settings(), request_id=request_id)
 
     generated = response.headers["X-Request-ID"]
     assert str(UUID(generated)) == generated

@@ -174,7 +174,7 @@ def _validate_ci(ci: str, errors: list[str]) -> None:
         "backend": (
             "backend",
             ["python -m pip install -e \".[dev]\"", "ruff check .", "mypy app", "pytest"],
-            {"actions/checkout@v4", "actions/setup-python@v5"},
+            {"actions/checkout@v7", "actions/setup-python@v6"},
         ),
         "frontend": (
             "frontend",
@@ -185,7 +185,7 @@ def _validate_ci(ci: str, errors: list[str]) -> None:
                 "pnpm test --run",
                 "pnpm build",
             ],
-            {"actions/checkout@v4", "pnpm/action-setup@v4", "actions/setup-node@v4"},
+            {"actions/checkout@v7", "pnpm/action-setup@v6", "actions/setup-node@v6"},
         ),
     }
     for job_name, (directory, commands, actions) in expected_jobs.items():
@@ -220,12 +220,12 @@ def _validate_pages(pages: str, errors: list[str]) -> None:
         return
 
     expected_actions = [
-        "actions/checkout@v4",
-        "pnpm/action-setup@v4",
-        "actions/setup-node@v4",
-        "actions/configure-pages@v5",
-        "actions/upload-pages-artifact@v3",
-        "actions/deploy-pages@v4",
+        "actions/checkout@v7",
+        "pnpm/action-setup@v6",
+        "actions/setup-node@v6",
+        "actions/configure-pages@v6",
+        "actions/upload-pages-artifact@v4",
+        "actions/deploy-pages@v5",
     ]
     if _uses(steps) != expected_actions:
         errors.append("pages.yml actions do not match the deployment contract")
@@ -252,12 +252,12 @@ def _validate_pages(pages: str, errors: list[str]) -> None:
         errors.append("pages.yml build must use repository variables and the repository-aware base path")
 
     upload_step = next(
-        (step for step in steps if step.get("uses") == "actions/upload-pages-artifact@v3"), None
+        (step for step in steps if step.get("uses") == "actions/upload-pages-artifact@v4"), None
     )
     if upload_step is None or _mapping(upload_step.get("with")) != {"path": "frontend/dist"}:
         errors.append("pages.yml must upload frontend/dist as the Pages artifact")
     deploy_step = next(
-        (step for step in steps if step.get("uses") == "actions/deploy-pages@v4"), None
+        (step for step in steps if step.get("uses") == "actions/deploy-pages@v5"), None
     )
     if deploy_step is None or deploy_step.get("id") != "deployment":
         errors.append("pages.yml deploy-pages step must expose the deployment result")

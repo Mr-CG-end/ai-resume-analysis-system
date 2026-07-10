@@ -2,6 +2,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.validate_infrastructure import validate_repository
 
@@ -33,6 +34,38 @@ def _replace(repository: Path, relative_path: str, old: str, new: str) -> None:
 
 def test_infrastructure_configuration_matches_contract() -> None:
     assert validate_repository(REPOSITORY_ROOT) == []
+
+
+def _workflow_actions(relative_path: str) -> list[str]:
+    contents = (REPOSITORY_ROOT / relative_path).read_text(encoding="utf-8")
+    document = yaml.load(contents, Loader=yaml.BaseLoader)
+    return [
+        step["uses"]
+        for job in document["jobs"].values()
+        for step in job["steps"]
+        if "uses" in step
+    ]
+
+
+def test_ci_uses_current_stable_action_major_versions() -> None:
+    assert _workflow_actions(".github/workflows/ci.yml") == [
+        "actions/checkout@v7",
+        "actions/setup-python@v6",
+        "actions/checkout@v7",
+        "pnpm/action-setup@v6",
+        "actions/setup-node@v6",
+    ]
+
+
+def test_pages_uses_current_stable_action_major_versions() -> None:
+    assert _workflow_actions(".github/workflows/pages.yml") == [
+        "actions/checkout@v7",
+        "pnpm/action-setup@v6",
+        "actions/setup-node@v6",
+        "actions/configure-pages@v6",
+        "actions/upload-pages-artifact@v4",
+        "actions/deploy-pages@v5",
+    ]
 
 
 def test_rejects_persistent_redis_volume(repository_copy: Path) -> None:

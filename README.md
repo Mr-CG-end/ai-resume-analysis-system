@@ -75,4 +75,4 @@ pnpm build
 - 前端：`.github/workflows/pages.yml` 从 `frontend/` 构建并上传 Pages artifact，仓库子路径由 `VITE_BASE_PATH` 注入，公开 API 地址由仓库变量 `VITE_API_BASE_URL` 注入。
 - CI：`.github/workflows/ci.yml` 在 push 和 pull request 上检查后端 pytest/Ruff/mypy 以及前端 lint/typecheck/test/build。
 
-这些文件提供可重复的构建和部署流程，不表示当前版本已经发布到线上。完整需求、架构、测试和部署约束见 [`docs/`](docs/)。
+这些文件提供可重复的构建和部署流程，不表示当前版本已经发布到线上。项目进度见 [`docs/00-project-checklist.md`](docs/00-project-checklist.md)，完整需求、架构、测试和部署约束见 [`docs/`](docs/)。

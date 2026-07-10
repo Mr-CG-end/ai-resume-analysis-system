@@ -69,3 +69,9 @@ class PdfTextTooLongError(PdfProcessingError):
     code = "PDF_TEXT_TOO_LONG"
     message = "PDF 可解析文本超过长度限制。"
     status_code = 422
+
+
+class PdfProcessingLimitExceededError(PdfProcessingError):
+    code = "PDF_PROCESSING_LIMIT_EXCEEDED"
+    message = "PDF 处理所需资源超过安全限制。"
+    status_code = 422

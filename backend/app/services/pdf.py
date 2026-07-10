@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 from collections import Counter
 from collections.abc import Sequence
+from io import BytesIO
 from pathlib import Path
 
-import pymupdf
+import pypdf.filters
+from pypdf import PdfReader
+from pypdf.errors import LimitReachedError, ParseError, PdfReadError
 
 from app.domain.errors import (
     PdfCorruptedError,
     PdfEncryptedError,
     PdfNoExtractableTextError,
     PdfPageLimitExceededError,
+    PdfProcessingLimitExceededError,
     PdfTextTooLongError,
     PdfTooLargeError,
     UnsupportedMediaTypeError,
@@ -22,6 +27,20 @@ from app.domain.pdf import ParsedPdf
 DEFAULT_MAX_PDF_BYTES = 10_485_760
 DEFAULT_MAX_PDF_PAGES = 30
 DEFAULT_MAX_RESUME_CHARS = 100_000
+MAX_PDF_CONTENT_BYTES = 50 * 1024 * 1024
+MAX_RAW_TEXT_CHARS = 1_000_000
+
+_PYPDF_OUTPUT_LIMITS = (
+    "FLATE_MAX_BUFFER_SIZE",
+    "JBIG2_MAX_OUTPUT_LENGTH",
+    "LZW_MAX_OUTPUT_LENGTH",
+    "MAX_ARRAY_BASED_STREAM_OUTPUT_LENGTH",
+    "MAX_DECLARED_STREAM_LENGTH",
+    "RUN_LENGTH_MAX_OUTPUT_LENGTH",
+    "ZLIB_MAX_OUTPUT_LENGTH",
+)
+for _limit_name in _PYPDF_OUTPUT_LIMITS:
+    setattr(pypdf.filters, _limit_name, MAX_PDF_CONTENT_BYTES)
 
 _HORIZONTAL_WHITESPACE = re.compile(r"[\t\f\v ]+")
 _VALID_TEXT = re.compile(r"[A-Za-z0-9\u3400-\u4dbf\u4e00-\u9fff]")
@@ -41,11 +60,25 @@ def _normalize_page(page_text: str) -> list[str]:
     return [_HORIZONTAL_WHITESPACE.sub(" ", line).strip() for line in normalized.split("\n")]
 
 
-def _boundary_indices(lines: Sequence[str], *, from_start: bool) -> list[int]:
+def _boundary_indices(lines: Sequence[str]) -> tuple[list[int], list[int]]:
     populated = [index for index, line in enumerate(lines) if line]
-    if not from_start:
-        populated.reverse()
-    return populated[:2]
+    populated_count = len(populated)
+    if populated_count < 3:
+        depth = 0
+    elif populated_count < 5:
+        depth = 1
+    else:
+        depth = 2
+    return populated[:depth], list(reversed(populated[-depth:])) if depth else []
+
+
+def _page_number_indices(lines: Sequence[str]) -> set[int]:
+    populated = [index for index, line in enumerate(lines) if line]
+    if not populated:
+        return set()
+    headers, footers = _boundary_indices(lines)
+    candidates = set(headers + footers) if headers or footers else {populated[0], populated[-1]}
+    return {index for index in candidates if _is_page_number(lines[index])}
 
 
 def _is_page_number(line: str) -> bool:
@@ -67,51 +100,50 @@ def _collapse_blank_lines(lines: Sequence[str]) -> str:
     return "\n".join(output)
 
 
+def _repeated_lines(counts: Counter[str], participant_count: int) -> set[str]:
+    if participant_count < 2:
+        return set()
+    threshold = max(2, math.ceil(participant_count * 0.6))
+    return {line for line, count in counts.items() if count >= threshold}
+
+
 def clean_pages(pages: Sequence[str]) -> str:
     """Conservatively normalize pages and remove repeated outer boundary lines."""
 
     normalized_pages = [_normalize_page(page) for page in pages]
     header_counts = (Counter[str](), Counter[str]())
     footer_counts = (Counter[str](), Counter[str]())
+    header_participants = [0, 0]
+    footer_participants = [0, 0]
     boundaries: list[tuple[list[int], list[int]]] = []
 
     for lines in normalized_pages:
-        headers = _boundary_indices(lines, from_start=True)
-        footers = _boundary_indices(lines, from_start=False)
+        headers, footers = _boundary_indices(lines)
         boundaries.append((headers, footers))
         for depth, index in enumerate(headers):
             header_counts[depth].update([lines[index].casefold()])
+            header_participants[depth] += 1
         for depth, index in enumerate(footers):
             footer_counts[depth].update([lines[index].casefold()])
+            footer_participants[depth] += 1
 
-    repeat_threshold = max(2, (len(normalized_pages) * 3 + 4) // 5)
     repeated_headers = tuple(
-        {
-            line
-            for line, count in counts.items()
-            if count >= (repeat_threshold if depth == 0 else max(2, len(normalized_pages)))
-        }
+        _repeated_lines(counts, header_participants[depth])
         for depth, counts in enumerate(header_counts)
     )
     repeated_footers = tuple(
-        {
-            line
-            for line, count in counts.items()
-            if count >= (repeat_threshold if depth == 0 else max(2, len(normalized_pages)))
-        }
+        _repeated_lines(counts, footer_participants[depth])
         for depth, counts in enumerate(footer_counts)
     )
 
     cleaned: list[str] = []
     for lines, (headers, footers) in zip(normalized_pages, boundaries, strict=True):
-        removable: set[int] = set()
+        removable = _page_number_indices(lines)
         for depth, index in enumerate(headers):
-            line = lines[index]
-            if line.casefold() in repeated_headers[depth] or _is_page_number(line):
+            if lines[index].casefold() in repeated_headers[depth]:
                 removable.add(index)
         for depth, index in enumerate(footers):
-            line = lines[index]
-            if line.casefold() in repeated_footers[depth] or _is_page_number(line):
+            if lines[index].casefold() in repeated_footers[depth]:
                 removable.add(index)
         page = _collapse_blank_lines(
             [line for index, line in enumerate(lines) if index not in removable]
@@ -122,9 +154,38 @@ def clean_pages(pages: Sequence[str]) -> str:
     return "\n\n".join(cleaned)
 
 
-def _has_encryption_dictionary(document: pymupdf.Document) -> bool:
-    value_type: str = document.xref_get_key(-1, "Encrypt")[0]  # type: ignore[no-untyped-call]
-    return value_type != "null"
+def _processing_limit_error() -> PdfProcessingLimitExceededError:
+    return PdfProcessingLimitExceededError(details={"max_bytes": MAX_PDF_CONTENT_BYTES})
+
+
+def _extract_pages(reader: PdfReader, *, max_pages: int) -> tuple[list[str], int]:
+    page_count = len(reader.pages)
+    if page_count > max_pages:
+        raise PdfPageLimitExceededError(
+            details={"max_pages": max_pages, "actual_pages": page_count}
+        )
+
+    pages: list[str] = []
+    content_bytes = 0
+    raw_character_count = 0
+    for page in reader.pages:
+        contents = page.get_contents()
+        if contents is not None:
+            content_bytes += len(contents.get_data())
+            if content_bytes > MAX_PDF_CONTENT_BYTES:
+                raise _processing_limit_error()
+
+        page_text = page.extract_text()
+        raw_character_count += len(page_text)
+        if raw_character_count > MAX_RAW_TEXT_CHARS:
+            raise PdfProcessingLimitExceededError(
+                details={
+                    "max_chars": MAX_RAW_TEXT_CHARS,
+                    "actual_chars": raw_character_count,
+                }
+            )
+        pages.append(page_text)
+    return pages, page_count
 
 
 def parse_pdf(
@@ -138,7 +199,6 @@ def parse_pdf(
 ) -> ParsedPdf:
     """Validate and parse an in-memory PDF without persisting its contents."""
 
-    raw_max_chars = max(max_chars, 0) * 2
     actual_bytes = len(pdf_bytes)
     if actual_bytes > max_bytes:
         raise PdfTooLargeError(details={"max_bytes": max_bytes, "actual_bytes": actual_bytes})
@@ -151,30 +211,14 @@ def parse_pdf(
         raise UnsupportedMediaTypeError()
 
     try:
-        with pymupdf.open(  # type: ignore[no-untyped-call]
-            stream=pdf_bytes, filetype="pdf"
-        ) as document:
-            if _has_encryption_dictionary(document) or document.needs_pass:
+        with BytesIO(pdf_bytes) as stream:
+            reader = PdfReader(stream, strict=True)
+            if reader.is_encrypted:
                 raise PdfEncryptedError()
-            if document.is_repaired:
-                raise PdfCorruptedError()
-
-            page_count = document.page_count
-            if page_count > max_pages:
-                raise PdfPageLimitExceededError(
-                    details={"max_pages": max_pages, "actual_pages": page_count}
-                )
-            pages: list[str] = []
-            raw_character_count = 0
-            for page in document:
-                page_text = page.get_text("text", sort=True)
-                raw_character_count += len(page_text)
-                if raw_character_count > raw_max_chars:
-                    raise PdfTextTooLongError(
-                        details={"max_chars": max_chars, "actual_chars": raw_character_count}
-                    )
-                pages.append(page_text)
-    except pymupdf.FileDataError as error:
+            pages, page_count = _extract_pages(reader, max_pages=max_pages)
+    except LimitReachedError as error:
+        raise _processing_limit_error() from error
+    except (ParseError, PdfReadError) as error:
         raise PdfCorruptedError() from error
 
     cleaned_text = clean_pages(pages)

@@ -121,7 +121,7 @@ def test_education_rejects_invalid_months(month: str) -> None:
 @pytest.mark.parametrize(
     ("field", "accepted"),
     [
-        ("filename", ["x", "x" * 255]),
+        ("filename", ["x", "x" * 1_000]),
         ("page_count", [1, 30]),
         ("character_count", [1, 100_000]),
     ],
@@ -141,7 +141,7 @@ def test_document_metadata_accepts_contract_boundaries(
 @pytest.mark.parametrize(
     ("field", "rejected"),
     [
-        ("filename", ["", "x" * 256]),
+        ("filename", [""]),
         ("page_count", [0, 31]),
         ("character_count", [0, 100_001]),
     ],
@@ -176,8 +176,25 @@ def test_resume_snapshot_accepts_uuid4_and_all_cleaned_text_boundaries() -> None
     payload["resume_id"] = f"res_{identifier}"
 
     for cleaned_text in ["x", "x" * 100_000]:
-        snapshot = ResumeSnapshot.model_validate({**payload, "cleaned_text": cleaned_text})
+        document = {**payload["document"], "character_count": len(cleaned_text)}
+        snapshot = ResumeSnapshot.model_validate(
+            {**payload, "document": document, "cleaned_text": cleaned_text}
+        )
         assert UUID(snapshot.resume_id.removeprefix("res_")).version == 4
+
+
+def test_resume_snapshot_rejects_character_count_mismatch() -> None:
+    with pytest.raises(ValidationError, match="character_count"):
+        ResumeSnapshot.model_validate(
+            {
+                **_snapshot_payload(),
+                "document": {
+                    "filename": "resume.pdf",
+                    "page_count": 1,
+                    "character_count": 11,
+                },
+            }
+        )
 
 
 @pytest.mark.parametrize(

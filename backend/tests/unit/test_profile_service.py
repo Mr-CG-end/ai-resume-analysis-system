@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
+from pydantic import ValidationError
 
 from app.schemas.ai_profile import (
     AiEducation,
@@ -129,6 +130,43 @@ async def test_phone_evidence_compares_digits_and_email_compares_casefold() -> N
 
 
 @pytest.mark.asyncio
+async def test_invalid_ai_contact_formats_use_rule_values() -> None:
+    cleaned_text = "电话 13800138000；邮箱 demo@example.com"
+    extracted = payload(
+        phone=evidence("1380013800", "13800138000"),
+        email=evidence("demo@example", "demo@example.com"),
+    )
+
+    result = await analyze_profile(cleaned_text, StubExtractor(extracted))
+
+    assert result.profile.phone == "13800138000"
+    assert result.profile.email == "demo@example.com"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("field", "value", "source"),
+    [
+        ("address", "Sample City", "Address: Sample City"),
+        ("expected_salary", "20k-30k", "20k-30k/月"),
+        ("expected_salary", "20k-30k", "２０ｋ－３０ｋ"),
+    ],
+    ids=["address-prefix", "truncated-salary", "full-width-salary"],
+)
+async def test_exact_only_fields_reject_nonidentical_evidence(
+    field: str,
+    value: str,
+    source: str,
+) -> None:
+    cleaned_text = source
+    extracted = payload(**{field: evidence(value, source)})
+
+    result = await analyze_profile(cleaned_text, StubExtractor(extracted))
+
+    assert getattr(result.profile, field) is None
+
+
+@pytest.mark.asyncio
 async def test_education_and_project_fields_are_filtered_independently() -> None:
     cleaned_text = (
         "示例大学 计算机科学 本科 2018-09 2022-06\n简历分析系统 后端开发 使用 FastAPI 和 PostgreSQL"
@@ -185,10 +223,12 @@ def period(
     *,
     start_evidence: str | None = None,
     end_evidence: str | None = None,
+    interval_evidence: str | None = None,
 ) -> AiEmploymentPeriod:
     return AiEmploymentPeriod(
         start_date=EvidenceMonth(value=start, evidence=start_evidence or start),
         end_date=EvidenceMonth(value=end, evidence=end_evidence or end),
+        evidence=interval_evidence or (start if start == end else f"{start} {end}"),
     )
 
 
@@ -228,9 +268,67 @@ async def test_reversed_or_unverifiable_periods_are_dropped() -> None:
 
 
 @pytest.mark.asyncio
+async def test_period_rejects_dates_combined_across_noncontiguous_segments() -> None:
+    cleaned_text = "2020-01\nCompany A\n2020-12"
+    extracted = payload(
+        employment_periods=[
+            period(
+                "2020-01",
+                "2020-12",
+                interval_evidence="2020-01 2020-12",
+            )
+        ]
+    )
+
+    result = await analyze_profile(cleaned_text, StubExtractor(extracted))
+
+    assert result.profile.years_of_experience is None
+
+
+@pytest.mark.asyncio
 async def test_one_inclusive_month_rounds_half_up_to_one_decimal() -> None:
     extracted = payload(employment_periods=[period("2024-05", "2024-05")])
 
     result = await analyze_profile("任职 2024-05", StubExtractor(extracted))
 
     assert result.profile.years_of_experience == 0.1
+
+
+def test_internal_evidence_strings_are_bounded() -> None:
+    assert EvidenceValue(value="x" * 10_000, evidence="x" * 10_000).value is not None
+
+    with pytest.raises(ValidationError):
+        EvidenceValue(value="x" * 10_001, evidence="x" * 10_001)
+
+
+def test_internal_collection_sizes_are_bounded() -> None:
+    empty_education = AiEducation(
+        school=evidence(),
+        degree=evidence(),
+        major=evidence(),
+        start_date=evidence(),
+        end_date=evidence(),
+    )
+    empty_project = AiProject(
+        name=evidence(),
+        role=evidence(),
+        description=evidence(),
+        technologies=[],
+    )
+    one_period = period("2024-05", "2024-05")
+
+    for field, item in (
+        ("education", empty_education),
+        ("projects", empty_project),
+        ("employment_periods", one_period),
+    ):
+        with pytest.raises(ValidationError):
+            payload(**{field: [item] * 51})
+
+    with pytest.raises(ValidationError):
+        AiProject(
+            name=evidence(),
+            role=evidence(),
+            description=evidence(),
+            technologies=[EvidenceText(value="Python", evidence="Python")] * 101,
+        )

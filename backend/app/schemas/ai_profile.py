@@ -1,10 +1,13 @@
 from typing import Annotated, Self
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.schemas.resume import Month
 
-NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+NonEmptyText = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=10_000),
+]
 
 
 class AiSchemaModel(BaseModel):
@@ -44,12 +47,13 @@ class AiProject(AiSchemaModel):
     name: EvidenceValue
     role: EvidenceValue
     description: EvidenceValue
-    technologies: list[EvidenceText]
+    technologies: list[EvidenceText] = Field(max_length=100)
 
 
 class AiEmploymentPeriod(AiSchemaModel):
     start_date: EvidenceMonth
     end_date: EvidenceMonth
+    evidence: NonEmptyText
 
 
 class AiProfilePayload(AiSchemaModel):
@@ -59,6 +63,6 @@ class AiProfilePayload(AiSchemaModel):
     address: EvidenceValue
     job_intention: EvidenceValue
     expected_salary: EvidenceValue
-    education: list[AiEducation]
-    projects: list[AiProject]
-    employment_periods: list[AiEmploymentPeriod]
+    education: list[AiEducation] = Field(max_length=50)
+    projects: list[AiProject] = Field(max_length=50)
+    employment_periods: list[AiEmploymentPeriod] = Field(max_length=50)

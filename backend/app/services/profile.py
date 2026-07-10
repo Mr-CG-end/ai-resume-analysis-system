@@ -80,6 +80,8 @@ def _validated_value(
         related = bool(value_digits) and value_digits in evidence_digits
     elif kind == "email":
         related = item.value.casefold() in item.evidence.casefold()
+    elif kind == "exact":
+        related = item.value == item.evidence
     else:
         related = _normalized(item.value) in _normalized(item.evidence)
 
@@ -155,6 +157,8 @@ def _validated_period(
     period: AiEmploymentPeriod,
     cleaned_text: str,
 ) -> tuple[int, int] | None:
+    if not _has_exact_evidence(cleaned_text, period.evidence):
+        return None
     if not _has_exact_evidence(cleaned_text, period.start_date.evidence):
         return None
     if not _has_exact_evidence(cleaned_text, period.end_date.evidence):
@@ -162,6 +166,10 @@ def _validated_period(
     if _normalized(period.start_date.value) not in _normalized(period.start_date.evidence):
         return None
     if _normalized(period.end_date.value) not in _normalized(period.end_date.evidence):
+        return None
+    if period.start_date.value not in period.evidence:
+        return None
+    if period.end_date.value not in period.evidence:
         return None
 
     start = _month_number(period.start_date.value)
@@ -212,8 +220,18 @@ def _profile_from_payload(
     payload: AiProfilePayload,
     cleaned_text: str,
 ) -> CandidateProfile:
-    phone = _validated_value(payload.phone, cleaned_text, kind="phone")
-    email = _validated_value(payload.email, cleaned_text, kind="email")
+    phone = _validated_value(
+        payload.phone,
+        cleaned_text,
+        kind="phone",
+        pattern=_PHONE_PATTERN,
+    )
+    email = _validated_value(
+        payload.email,
+        cleaned_text,
+        kind="email",
+        pattern=_EMAIL_PATTERN,
+    )
     education = [
         education_item
         for item in payload.education
@@ -228,9 +246,13 @@ def _profile_from_payload(
         name=_validated_value(payload.name, cleaned_text),
         phone=phone or _first_phone(cleaned_text),
         email=email or _first_email(cleaned_text),
-        address=_validated_value(payload.address, cleaned_text),
+        address=_validated_value(payload.address, cleaned_text, kind="exact"),
         job_intention=_validated_value(payload.job_intention, cleaned_text),
-        expected_salary=_validated_value(payload.expected_salary, cleaned_text),
+        expected_salary=_validated_value(
+            payload.expected_salary,
+            cleaned_text,
+            kind="exact",
+        ),
         years_of_experience=_years_of_experience(payload.employment_periods, cleaned_text),
         education=education,
         projects=projects,

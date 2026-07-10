@@ -105,6 +105,7 @@ async def _post_resume(
     extractor: object | None = None,
     pdf_bytes: bytes | None = None,
     request_id: str = "req-resume-test",
+    filename: str = "candidate.pdf",
 ) -> tuple[httpx.Response, object]:
     application = create_app()
     application.dependency_overrides[get_settings] = lambda: settings
@@ -115,7 +116,7 @@ async def _post_resume(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/api/v1/resumes",
-            files={"file": ("candidate.pdf", content, "application/pdf")},
+            files={"file": (filename, content, "application/pdf")},
             headers={"X-Request-ID": request_id},
         )
     return response, application
@@ -143,6 +144,20 @@ async def test_public_resume_route_returns_verified_snapshot() -> None:
     assert body["degraded"] is False
     assert body["cached"] is False
     assert extractor.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_public_resume_route_accepts_filename_longer_than_255_characters() -> None:
+    filename = f"{'x' * 300}.pdf"
+
+    response, _ = await _post_resume(
+        settings=_settings(),
+        extractor=FakeExtractor(),
+        filename=filename,
+    )
+
+    assert response.status_code == 201
+    assert response.json()["document"]["filename"] == filename
 
 
 @pytest.mark.asyncio

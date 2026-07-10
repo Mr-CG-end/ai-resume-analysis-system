@@ -1,7 +1,14 @@
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 Month = Annotated[str, StringConstraints(pattern=r"^\d{4}-(?:0[1-9]|1[0-2])$")]
 EducationEndDate = Annotated[
@@ -25,7 +32,7 @@ class ContractModel(BaseModel):
 
 
 class DocumentMetadata(ContractModel):
-    filename: str = Field(min_length=1, max_length=255)
+    filename: str = Field(min_length=1)
     page_count: int = Field(ge=1, le=30)
     character_count: int = Field(ge=1, le=100_000)
 
@@ -74,3 +81,9 @@ class ResumeSnapshot(ContractModel):
         if parsed.version != 4 or identifier != str(parsed):
             raise ValueError("resume_id must contain a canonical UUIDv4")
         return value
+
+    @model_validator(mode="after")
+    def character_count_matches_cleaned_text(self) -> Self:
+        if self.document.character_count != len(self.cleaned_text):
+            raise ValueError("document character_count must match cleaned_text length")
+        return self

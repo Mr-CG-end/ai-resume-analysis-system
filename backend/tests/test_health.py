@@ -4,9 +4,14 @@ from uuid import UUID
 import httpx
 import pytest
 from fastapi import FastAPI, HTTPException
+from starlette.requests import ClientDisconnect, Request
+from starlette.responses import Response
+from starlette.routing import Route, Router
+from starlette.types import Message, Scope
 
 from app.api.routes import health as health_module
 from app.core.config import Settings
+from app.core.request_id import RequestIdMiddleware
 from app.main import app
 
 RedisPing = Callable[[str], Awaitable[bool]]
@@ -212,6 +217,46 @@ async def test_unhandled_server_error_uses_safe_contract_and_request_id(
     assert "secret-token" not in caplog.text
     assert "must-not-appear" not in caplog.text
     assert "must-not-appear" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_request_id_middleware_propagates_client_disconnect_without_response(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def read_request_body(request: Request) -> Response:
+        await request.body()
+        return Response(status_code=204)
+
+    middleware = RequestIdMiddleware(
+        Router(routes=[Route("/test/disconnect", read_request_body, methods=["POST"])])
+    )
+    scope: Scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/test/disconnect",
+        "raw_path": b"/test/disconnect",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [(b"x-request-id", b"req-client-disconnect")],
+        "client": ("127.0.0.1", 12345),
+        "server": ("test", 80),
+    }
+    messages: list[Message] = []
+
+    async def receive() -> Message:
+        return {"type": "http.disconnect"}
+
+    async def send(message: Message) -> None:
+        messages.append(message)
+
+    with pytest.raises(ClientDisconnect):
+        await middleware(scope, receive, send)
+
+    assert messages == []
+    assert "unhandled_request_error" not in caplog.text
 
 
 @pytest.mark.asyncio

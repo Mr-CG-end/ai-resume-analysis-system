@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import ClientDisconnect
 from starlette.responses import JSONResponse
 
 SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
@@ -21,6 +22,8 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
         try:
             response = await call_next(request)
+        except ClientDisconnect:
+            raise
         except Exception:
             logger.error(
                 "unhandled_request_error request_id=%s method=%s",

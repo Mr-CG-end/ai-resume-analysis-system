@@ -33,13 +33,18 @@ def _add_text_page(document: pymupdf.Document, text: str) -> None:
         raise ValueError("fixture text does not fit on one page")
 
 
-def _save(document: pymupdf.Document, name: str, **options: object) -> None:
-    destination = FIXTURE_DIRECTORY / name
+def _save(
+    document: pymupdf.Document,
+    output_directory: Path,
+    name: str,
+    **options: object,
+) -> None:
+    destination = output_directory / name
     document.save(destination, garbage=4, clean=True, deflate=True, **options)
     document.close()
 
 
-def _generate_valid_resume() -> None:
+def _generate_valid_resume(output_directory: Path) -> None:
     document = _new_document()
     pages = (
         "PAGE ONE - PROFILE\n"
@@ -59,10 +64,10 @@ def _generate_valid_resume() -> None:
     )
     for text in pages:
         _add_text_page(document, text)
-    _save(document, "resume-valid-3-pages.pdf")
+    _save(document, output_directory, "resume-valid-3-pages.pdf")
 
 
-def _generate_missing_address_resume() -> None:
+def _generate_missing_address_resume(output_directory: Path) -> None:
     document = _new_document()
     _add_text_page(
         document,
@@ -71,12 +76,12 @@ def _generate_missing_address_resume() -> None:
         "Phone: 13800138000\n"
         "Email: demo@example.com\n"
         "Skills: Python, FastAPI\n"
-        "This synthetic profile intentionally contains no postal address.",
+        "This synthetic profile intentionally omits location details.",
     )
-    _save(document, "resume-missing-address.pdf")
+    _save(document, output_directory, "resume-missing-address.pdf")
 
 
-def _generate_repeated_header_resume() -> None:
+def _generate_repeated_header_resume(output_directory: Path) -> None:
     document = _new_document()
     bodies = (
         "SECTION ONE\nSynthetic profile summary and core skills.",
@@ -91,10 +96,10 @@ def _generate_repeated_header_resume() -> None:
             "CANONICAL RESUME FIXTURE\n"
             f"Page {page_number} of {len(bodies)}",
         )
-    _save(document, "resume-repeated-header.pdf")
+    _save(document, output_directory, "resume-repeated-header.pdf")
 
 
-def _generate_scan_only_resume() -> None:
+def _generate_scan_only_resume(output_directory: Path) -> None:
     document = _new_document()
     page = document.new_page(width=PAGE.width, height=PAGE.height)
     width, height = 64, 80
@@ -105,14 +110,15 @@ def _generate_scan_only_resume() -> None:
             pixels.extend((shade, shade, shade))
     image = f"P6\n{width} {height}\n255\n".encode() + bytes(pixels)
     page.insert_image(TEXT_RECT, stream=image)
-    _save(document, "resume-scan-only.pdf")
+    _save(document, output_directory, "resume-scan-only.pdf")
 
 
-def _generate_encrypted_resume() -> None:
+def _generate_encrypted_resume(output_directory: Path) -> None:
     document = _new_document()
     _add_text_page(document, "ENCRYPTED SYNTHETIC RESUME FIXTURE")
     _save(
         document,
+        output_directory,
         "resume-encrypted.pdf",
         encryption=pymupdf.PDF_ENCRYPT_AES_256,
         owner_pw=FIXTURE_PASSWORD,
@@ -121,23 +127,27 @@ def _generate_encrypted_resume() -> None:
     )
 
 
-def _generate_invalid_files() -> None:
-    (FIXTURE_DIRECTORY / "resume-corrupted.pdf").write_bytes(
+def _generate_invalid_files(output_directory: Path) -> None:
+    (output_directory / "resume-corrupted.pdf").write_bytes(
         b"%PDF-1.7\nsynthetic corrupt binary data\x00\xff\x00\n%%EOF\n"
     )
-    (FIXTURE_DIRECTORY / "not-a-pdf.pdf").write_bytes(
+    (output_directory / "not-a-pdf.pdf").write_bytes(
         b"This is a synthetic non-PDF fixture.\n"
     )
 
 
+def generate_fixtures(output_directory: Path = FIXTURE_DIRECTORY) -> None:
+    output_directory.mkdir(parents=True, exist_ok=True)
+    _generate_valid_resume(output_directory)
+    _generate_missing_address_resume(output_directory)
+    _generate_repeated_header_resume(output_directory)
+    _generate_scan_only_resume(output_directory)
+    _generate_encrypted_resume(output_directory)
+    _generate_invalid_files(output_directory)
+
+
 def main() -> None:
-    FIXTURE_DIRECTORY.mkdir(parents=True, exist_ok=True)
-    _generate_valid_resume()
-    _generate_missing_address_resume()
-    _generate_repeated_header_resume()
-    _generate_scan_only_resume()
-    _generate_encrypted_resume()
-    _generate_invalid_files()
+    generate_fixtures()
     print(f"Generated canonical fixtures in {FIXTURE_DIRECTORY}")
 
 

@@ -25,7 +25,9 @@ def _mapping(value: object) -> dict[str, object] | None:
     return {key: item for key, item in value.items() if isinstance(key, str)}
 
 
-def _load_yaml(contents: str, relative_path: str, errors: list[str]) -> dict[str, object] | None:
+def _load_yaml(
+    contents: str, relative_path: str, errors: list[str]
+) -> dict[str, object] | None:
     try:
         document = yaml.load(contents, Loader=yaml.BaseLoader)
     except yaml.YAMLError as error:
@@ -84,11 +86,16 @@ def _validate_dockerfile(dockerfile: str, errors: list[str]) -> None:
     if not instructions or instructions[0] != ("FROM", expected_base):
         errors.append(f"backend/Dockerfile must start from {expected_base}")
 
-    copies = [argument for instruction, argument in instructions if instruction == "COPY"]
+    copies = [
+        argument for instruction, argument in instructions if instruction == "COPY"
+    ]
     if not any(
-        re.fullmatch(r"(?:--\S+\s+)*requirements\.lock\s+\.?/?", item) for item in copies
+        re.fullmatch(r"(?:--\S+\s+)*requirements\.lock\s+\.?/?", item)
+        for item in copies
     ):
-        errors.append("backend/Dockerfile must copy requirements.lock before installing dependencies")
+        errors.append(
+            "backend/Dockerfile must copy requirements.lock before installing dependencies"
+        )
     if not any(re.fullmatch(r"(?:--\S+\s+)*app\s+\.?/?app/?", item) for item in copies):
         errors.append("backend/Dockerfile must copy the application package")
     if len(copies) != 2:
@@ -99,28 +106,47 @@ def _validate_dockerfile(dockerfile: str, errors: list[str]) -> None:
         "python -m pip install --no-cache-dir --require-hashes -r requirements.lock"
     )
     if expected_install not in runs:
-        errors.append("backend/Dockerfile must install the hash-locked runtime dependencies")
+        errors.append(
+            "backend/Dockerfile must install the hash-locked runtime dependencies"
+        )
 
     install_index = next(
-        (index for index, item in enumerate(instructions) if item == ("RUN", expected_install)),
+        (
+            index
+            for index, item in enumerate(instructions)
+            if item == ("RUN", expected_install)
+        ),
         None,
     )
     app_copy_index = next(
         (
             index
             for index, (instruction, argument) in enumerate(instructions)
-            if instruction == "COPY" and re.fullmatch(r"(?:--\S+\s+)*app\s+\.?/?app/?", argument)
+            if instruction == "COPY"
+            and re.fullmatch(r"(?:--\S+\s+)*app\s+\.?/?app/?", argument)
         ),
         None,
     )
-    if install_index is None or app_copy_index is None or install_index >= app_copy_index:
-        errors.append("backend/Dockerfile must install dependencies before copying app/")
+    if (
+        install_index is None
+        or app_copy_index is None
+        or install_index >= app_copy_index
+    ):
+        errors.append(
+            "backend/Dockerfile must install dependencies before copying app/"
+        )
 
-    exposes = [argument.split() for instruction, argument in instructions if instruction == "EXPOSE"]
+    exposes = [
+        argument.split()
+        for instruction, argument in instructions
+        if instruction == "EXPOSE"
+    ]
     if not any("9000" in ports for ports in exposes):
         errors.append("backend/Dockerfile must expose port 9000")
 
-    commands = [argument for instruction, argument in instructions if instruction == "CMD"]
+    commands = [
+        argument for instruction, argument in instructions if instruction == "CMD"
+    ]
     expected_command = [
         "uvicorn",
         "app.main:app",
@@ -139,7 +165,9 @@ def _validate_dockerfile(dockerfile: str, errors: list[str]) -> None:
 
 def _workflow_parts(
     document: dict[str, object], relative_path: str, errors: list[str]
-) -> tuple[dict[str, object] | None, dict[str, object] | None, dict[str, object] | None]:
+) -> tuple[
+    dict[str, object] | None, dict[str, object] | None, dict[str, object] | None
+]:
     triggers = _mapping(document.get("on"))
     permissions = _mapping(document.get("permissions"))
     jobs = _mapping(document.get("jobs"))
@@ -152,7 +180,9 @@ def _workflow_parts(
     return triggers, permissions, jobs
 
 
-def _job_steps(job: object, label: str, errors: list[str]) -> list[dict[str, object]] | None:
+def _job_steps(
+    job: object, label: str, errors: list[str]
+) -> list[dict[str, object]] | None:
     job_mapping = _mapping(job)
     if job_mapping is None or not isinstance(job_mapping.get("steps"), list):
         errors.append(f"{label} must define a steps list")
@@ -186,20 +216,25 @@ def _validate_ci(ci: str, errors: list[str]) -> None:
     document = _load_yaml(ci, ".github/workflows/ci.yml", errors)
     if document is None:
         return
-    triggers, permissions, jobs = _workflow_parts(document, ".github/workflows/ci.yml", errors)
+    triggers, permissions, jobs = _workflow_parts(
+        document, ".github/workflows/ci.yml", errors
+    )
     if triggers is not None and not {"push", "pull_request"}.issubset(triggers):
         errors.append("ci.yml must run on pushes and pull requests")
     if permissions != {"contents": "read"}:
         errors.append("ci.yml permissions must be exactly contents: read")
     if jobs is None or set(jobs) != {"backend", "infrastructure", "frontend"}:
-        errors.append("ci.yml must define exactly backend, infrastructure and frontend jobs")
+        errors.append(
+            "ci.yml must define exactly backend, infrastructure and frontend jobs"
+        )
         return
 
     expected_jobs = {
         "backend": (
             "backend",
             [
-                "python -m pip install -e \".[dev]\"",
+                "python -m pip install --require-hashes -r requirements.lock",
+                'python -m pip install -e ".[dev]"',
                 "ruff format --check .",
                 "ruff check .",
                 "mypy app",
@@ -241,7 +276,8 @@ def _validate_ci(ci: str, errors: list[str]) -> None:
         if set(_uses(steps)) != actions:
             errors.append(f"ci.yml {job_name} job actions do not match the contract")
         setup_python = next(
-            (step for step in steps if step.get("uses") == "actions/setup-python@v6"), None
+            (step for step in steps if step.get("uses") == "actions/setup-python@v6"),
+            None,
         )
         if setup_python is not None:
             options = _mapping(setup_python.get("with"))
@@ -253,9 +289,15 @@ def _validate_pages(pages: str, errors: list[str]) -> None:
     document = _load_yaml(pages, ".github/workflows/pages.yml", errors)
     if document is None:
         return
-    triggers, permissions, jobs = _workflow_parts(document, ".github/workflows/pages.yml", errors)
+    triggers, permissions, jobs = _workflow_parts(
+        document, ".github/workflows/pages.yml", errors
+    )
     push = _mapping(triggers.get("push")) if triggers else None
-    if push is None or push.get("branches") != ["main"] or "workflow_dispatch" not in triggers:
+    if (
+        push is None
+        or push.get("branches") != ["main"]
+        or "workflow_dispatch" not in triggers
+    ):
         errors.append("pages.yml must run for main pushes and workflow dispatches")
     if permissions != {}:
         errors.append("pages.yml workflow-level permissions must be empty")
@@ -273,7 +315,9 @@ def _validate_pages(pages: str, errors: list[str]) -> None:
     if "environment" in build:
         errors.append("pages.yml build job must not own an environment")
     if _mapping(deploy.get("permissions")) != {"pages": "write", "id-token": "write"}:
-        errors.append("pages.yml deploy job permissions must be exactly pages and id-token write")
+        errors.append(
+            "pages.yml deploy job permissions must be exactly pages and id-token write"
+        )
     if deploy.get("needs") != "build":
         errors.append("pages.yml deploy job must need the build job")
     environment = _mapping(deploy.get("environment"))
@@ -312,13 +356,17 @@ def _validate_pages(pages: str, errors: list[str]) -> None:
     if any(step.get("working-directory") != "frontend" for step in run_steps):
         errors.append("pages.yml commands must run from frontend")
 
-    build_step = next((step for step in run_steps if step.get("run") == "pnpm build"), None)
+    build_step = next(
+        (step for step in run_steps if step.get("run") == "pnpm build"), None
+    )
     expected_environment = {
         "VITE_API_BASE_URL": "${{ vars.VITE_API_BASE_URL }}",
         "VITE_BASE_PATH": "/${{ github.event.repository.name }}/",
     }
     if build_step is None or _mapping(build_step.get("env")) != expected_environment:
-        errors.append("pages.yml build must use repository variables and the repository-aware base path")
+        errors.append(
+            "pages.yml build must use repository variables and the repository-aware base path"
+        )
 
     upload_step = next(
         (
@@ -328,9 +376,13 @@ def _validate_pages(pages: str, errors: list[str]) -> None:
         ),
         None,
     )
-    if upload_step is None or _mapping(upload_step.get("with")) != {"path": "frontend/dist"}:
+    if upload_step is None or _mapping(upload_step.get("with")) != {
+        "path": "frontend/dist"
+    }:
         errors.append("pages.yml must upload frontend/dist as the Pages artifact")
-    if _run_commands(deploy_steps) or _uses(deploy_steps) != ["actions/deploy-pages@v5"]:
+    if _run_commands(deploy_steps) or _uses(deploy_steps) != [
+        "actions/deploy-pages@v5"
+    ]:
         errors.append("pages.yml deploy job must only deploy the Pages artifact")
         return
     deploy_step = deploy_steps[0]
@@ -356,31 +408,40 @@ def _validate_pyproject(pyproject: str, errors: list[str]) -> None:
     if project.get("requires-python") != "==3.12.13":
         errors.append("backend/pyproject.toml requires-python must be exactly 3.12.13")
     dependencies = project.get("dependencies")
-    runtime_requirements = {
-        _normalize_package_name(item): item
-        for item in dependencies
-        if isinstance(item, str)
-    } if isinstance(dependencies, list) else {}
-    expected_pdf_requirements = {
+    runtime_requirements = (
+        {
+            _normalize_package_name(item): item
+            for item in dependencies
+            if isinstance(item, str)
+        }
+        if isinstance(dependencies, list)
+        else {}
+    )
+    expected_runtime_requirements = {
         "pymupdf": "PyMuPDF>=1.25,<2.0",
         "python-multipart": "python-multipart>=0.0.20,<1.0",
+        "uvicorn": "uvicorn>=0.34,<1.0",
     }
     if any(
         runtime_requirements.get(name) != requirement
-        for name, requirement in expected_pdf_requirements.items()
+        for name, requirement in expected_runtime_requirements.items()
     ):
         errors.append(
             "backend/pyproject.toml runtime dependencies must include the bounded "
-            "PyMuPDF and python-multipart requirements"
+            "PyMuPDF, python-multipart and minimal uvicorn requirements"
         )
     optional = project.get("optional-dependencies")
     dev = optional.get("dev") if isinstance(optional, dict) else None
-    dev_names = {
-        _normalize_package_name(item) for item in dev if isinstance(item, str)
-    } if isinstance(dev, list) else set()
+    dev_names = (
+        {_normalize_package_name(item) for item in dev if isinstance(item, str)}
+        if isinstance(dev, list)
+        else set()
+    )
     required_dev_names = {"pip-tools", "pytest-cov"}
     if not required_dev_names.issubset(dev_names):
-        errors.append("backend/pyproject.toml dev dependencies must include pip-tools and pytest-cov")
+        errors.append(
+            "backend/pyproject.toml dev dependencies must include pip-tools and pytest-cov"
+        )
 
     ruff = document.get("tool", {}).get("ruff", {})
     mypy = document.get("tool", {}).get("mypy", {})
@@ -392,10 +453,14 @@ def _validate_pyproject(pyproject: str, errors: list[str]) -> None:
 
 def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
     requirement_lines = [
-        line for line in lock.splitlines() if line and not line.startswith((" ", "#", "--"))
+        line
+        for line in lock.splitlines()
+        if line and not line.startswith((" ", "#", "--"))
     ]
     if not requirement_lines:
-        errors.append("backend/requirements.lock must contain pinned runtime dependencies")
+        errors.append(
+            "backend/requirements.lock must contain pinned runtime dependencies"
+        )
         return
 
     pattern = re.compile(
@@ -403,7 +468,9 @@ def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
     )
     for index, requirement in enumerate(requirement_lines):
         if pattern.fullmatch(requirement) is None:
-            errors.append(f"backend/requirements.lock entry is not exactly pinned: {requirement}")
+            errors.append(
+                f"backend/requirements.lock entry is not exactly pinned: {requirement}"
+            )
             continue
         start = lock.index(requirement)
         end = (
@@ -412,7 +479,9 @@ def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
             else len(lock)
         )
         if "--hash=sha256:" not in lock[start:end]:
-            errors.append(f"backend/requirements.lock entry has no SHA-256 hash: {requirement}")
+            errors.append(
+                f"backend/requirements.lock entry has no SHA-256 hash: {requirement}"
+            )
 
     locked_names = {_normalize_package_name(item) for item in requirement_lines}
     required_runtime_names = {
@@ -424,7 +493,26 @@ def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
         "uvicorn",
     }
     if not required_runtime_names.issubset(locked_names):
-        errors.append("backend/requirements.lock is missing a direct runtime dependency")
+        errors.append(
+            "backend/requirements.lock is missing a direct runtime dependency"
+        )
+    uvicorn_requirement = next(
+        (
+            item
+            for item in requirement_lines
+            if _normalize_package_name(item) == "uvicorn"
+        ),
+        "",
+    )
+    if "[" in uvicorn_requirement:
+        errors.append(
+            "backend/requirements.lock must use uvicorn without optional extras"
+        )
+    standard_only_names = {"httptools", "uvloop", "watchfiles", "websockets"}
+    if locked_names & standard_only_names:
+        errors.append(
+            "backend/requirements.lock must not include uvicorn standard-only dependencies"
+        )
     forbidden_dev_names = {
         "httpx",
         "mypy",
@@ -435,7 +523,9 @@ def _validate_requirements_lock(lock: str, errors: list[str]) -> None:
         "ruff",
     }
     if locked_names & forbidden_dev_names:
-        errors.append("backend/requirements.lock must not contain direct development-only tools")
+        errors.append(
+            "backend/requirements.lock must not contain direct development-only tools"
+        )
 
 
 def _validate_python_documentation(root: Path, errors: list[str]) -> None:
@@ -449,6 +539,23 @@ def _validate_python_documentation(root: Path, errors: list[str]) -> None:
         contents = _read_required(root, relative_path, errors)
         if contents and ("Python 3.12.13" not in contents or "Python 3.11" in contents):
             errors.append(f"{relative_path} must document Python 3.12.13 exactly")
+
+
+def _validate_third_party_license_notice(root: Path, errors: list[str]) -> None:
+    readme = _read_required(root, "README.md", errors)
+    notice = _read_required(root, "THIRD_PARTY_NOTICES.md", errors)
+    required_markers = (
+        "PyMuPDF 1.28",
+        "AGPL-3.0",
+        "commercial license",
+        "https://pymupdf.readthedocs.io/en/latest/about.html#license-and-copyright",
+    )
+    if readme and not all(marker in readme for marker in required_markers):
+        errors.append("README.md must document the PyMuPDF 1.28 release license gate")
+    if notice and not all(marker in notice for marker in required_markers):
+        errors.append(
+            "THIRD_PARTY_NOTICES.md must document PyMuPDF licensing and its official source"
+        )
 
 
 def validate_repository(root: Path = REPOSITORY_ROOT) -> list[str]:
@@ -479,6 +586,7 @@ def validate_repository(root: Path = REPOSITORY_ROOT) -> list[str]:
         _validate_pages(pages, errors)
 
     _validate_python_documentation(root, errors)
+    _validate_third_party_license_notice(root, errors)
 
     return errors
 

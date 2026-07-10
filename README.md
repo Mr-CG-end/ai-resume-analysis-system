@@ -75,4 +75,8 @@ pnpm build
 - 前端：`.github/workflows/pages.yml` 从 `frontend/` 构建并上传 Pages artifact，仓库子路径由 `VITE_BASE_PATH` 注入，公开 API 地址由仓库变量 `VITE_API_BASE_URL` 注入。
 - CI：`.github/workflows/ci.yml` 在 push 和 pull request 上检查后端 pytest/Ruff/mypy 以及前端 lint/typecheck/test/build。
 
+## 第三方许可发布门禁
+
+后端锁定的 PyMuPDF 1.28 采用 AGPL-3.0 / commercial license（商业许可）双许可。维护者在任何公开部署或分发前，必须明确选择并完成 AGPL-3.0 合规，或取得适用的商业许可；在完成该选择前不得发布。许可说明与来源见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) 及 [PyMuPDF 官方许可说明](https://pymupdf.readthedocs.io/en/latest/about.html#license-and-copyright)。本仓库没有代替维护者作出许可选择。
+
 这些文件提供可重复的构建和部署流程，不表示当前版本已经发布到线上。项目进度见 [`docs/00-project-checklist.md`](docs/00-project-checklist.md)，完整需求、架构、测试和部署约束见 [`docs/`](docs/)。项目完整功能完成后，最终由用户按 [`docs/07-local-manual-acceptance.md`](docs/07-local-manual-acceptance.md) 在本地执行人工验收并确认结果；当前骨架核验不能替代最终验收。

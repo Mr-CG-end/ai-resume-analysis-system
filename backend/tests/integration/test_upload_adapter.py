@@ -1,11 +1,14 @@
 import logging
 from collections.abc import AsyncIterator, Callable
 from dataclasses import asdict
+from typing import BinaryIO
 
 import httpx
 import pytest
 from fastapi import FastAPI, Request
-from starlette.datastructures import UploadFile
+from starlette.datastructures import Headers, UploadFile
+from starlette.requests import ClientDisconnect
+from starlette.types import Message
 
 from app.api.upload import parse_pdf_upload
 from app.core.error_handlers import register_error_handlers
@@ -254,6 +257,80 @@ async def test_chunked_oversized_request_stops_consuming_after_total_body_budget
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "PDF_TOO_LARGE"
     assert stream.yielded * chunk_size < len(body)
+
+
+@pytest.mark.asyncio
+async def test_multipart_disconnect_propagates_without_leaking_temporary_files(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import tempfile
+
+    opened: list[tempfile.SpooledTemporaryFile[bytes]] = []
+    created_uploads: list[UploadFile] = []
+    original_tempfile = tempfile.SpooledTemporaryFile
+
+    def recording_tempfile(*, max_size: int) -> tempfile.SpooledTemporaryFile[bytes]:
+        file = original_tempfile(max_size=max_size)
+        opened.append(file)
+        return file
+
+    class RecordingUploadFile(UploadFile):
+        def __init__(
+            self,
+            file: BinaryIO,
+            *,
+            size: int | None = None,
+            filename: str | None = None,
+            headers: Headers | None = None,
+        ) -> None:
+            super().__init__(file, size=size, filename=filename, headers=headers)
+            created_uploads.append(self)
+
+    boundary = b"disconnect-boundary"
+    first_chunk = (
+        b"--"
+        + boundary
+        + b'\r\nContent-Disposition: form-data; name="file"; filename="private.pdf"'
+        + b"\r\nContent-Type: application/pdf\r\n\r\n"
+        + b"x" * (1024 * 1024 + 1)
+    )
+    messages: list[Message] = [
+        {"type": "http.request", "body": first_chunk, "more_body": True},
+        {"type": "http.disconnect"},
+    ]
+
+    async def receive() -> Message:
+        return messages.pop(0)
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/internal/pdf",
+            "headers": [
+                (
+                    b"content-type",
+                    b"multipart/form-data; boundary=" + boundary,
+                ),
+            ],
+        },
+        receive=receive,
+    )
+    monkeypatch.setattr("starlette.formparsers.SpooledTemporaryFile", recording_tempfile)
+    monkeypatch.setattr("starlette.formparsers.UploadFile", RecordingUploadFile)
+    caplog.set_level(logging.ERROR)
+
+    with pytest.raises(ClientDisconnect):
+        await parse_pdf_upload(
+            request,
+            parser=lambda *_args, **_kwargs: _parsed(),
+            max_bytes=2 * 1024 * 1024,
+        )
+
+    assert all(upload.file.closed for upload in created_uploads)
+    assert all(file.closed for file in opened)
+    assert not caplog.records
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,7 @@ from fastapi import Request
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartException
-from starlette.types import Message, Receive
+from starlette.types import Message
 
 from app.domain.errors import DomainError, PdfTooLargeError
 from app.domain.pdf import ParsedPdf
@@ -20,19 +20,16 @@ class _RequestBodyTooLarge(MultiPartException):
     pass
 
 
-class _LimitedReceive:
-    def __init__(self, receive: Receive, *, max_bytes: int) -> None:
-        self._receive = receive
-        self._max_bytes = max_bytes
-        self._bytes_received = 0
+class _BufferedReceive:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+        self._sent = False
 
     async def __call__(self) -> Message:
-        message = await self._receive()
-        if message["type"] == "http.request":
-            self._bytes_received += len(message.get("body", b""))
-            if self._bytes_received > self._max_bytes:
-                raise _RequestBodyTooLarge("Request body exceeded maximum size.")
-        return message
+        if self._sent:
+            return {"type": "http.request", "body": b"", "more_body": False}
+        self._sent = True
+        return {"type": "http.request", "body": self._body, "more_body": False}
 
 
 class PdfParser(Protocol):
@@ -75,6 +72,19 @@ async def _read_at_most(upload: UploadFile, *, max_bytes: int) -> bytes:
     return b"".join(chunks)
 
 
+async def _read_request_body_at_most(request: Request, *, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    bytes_read = 0
+
+    async for chunk in request.stream():
+        bytes_read += len(chunk)
+        if bytes_read > max_bytes:
+            raise _RequestBodyTooLarge("Request body exceeded maximum size.")
+        chunks.append(chunk)
+
+    return b"".join(chunks)
+
+
 async def parse_pdf_upload(
     request: Request,
     *,
@@ -93,13 +103,14 @@ async def parse_pdf_upload(
         if declared_length > request_body_limit:
             raise PdfTooLargeError(details={"max_bytes": max_bytes})
 
-    scope = dict(request.scope)
-    scope.pop("app", None)
-    bounded_request = Request(
-        scope,
-        receive=_LimitedReceive(request.receive, max_bytes=request_body_limit),
-    )
     try:
+        request_body = await _read_request_body_at_most(
+            request,
+            max_bytes=request_body_limit,
+        )
+        scope = dict(request.scope)
+        scope.pop("app", None)
+        bounded_request = Request(scope, receive=_BufferedReceive(request_body))
         form_context = bounded_request.form(
             max_files=MAX_MULTIPART_FILES,
             max_fields=MAX_MULTIPART_FIELDS,

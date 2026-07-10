@@ -87,6 +87,8 @@ API 基础路径为 `/api/v1`，请求和响应使用 UTF-8。除文件上传外
 
 请求类型为 `multipart/form-data`，字段名固定为 `file`，且只能出现一个文件。前端校验只用于改善体验，服务端必须重复执行全部校验。
 
+阶段 2 只提供可复用的 multipart 上传适配和内部 `ParsedPdf` 结果，不在正式应用挂载本端点的成功路径。阶段 3 完成真实 `CandidateProfile` 后，才挂载 `POST /api/v1/resumes` 并返回下述完整 `ResumeSnapshot`；任何阶段都不得用空档案或伪造档案临时满足成功契约。
+
 成功时返回 `201 Created`，响应体为 `ResumeSnapshot`。示例：
 
 ```json
@@ -125,6 +127,7 @@ API 基础路径为 `/api/v1`，请求和响应使用 UTF-8。除文件上传外
 | `422` | `PDF_ENCRYPTED` | PDF 已加密且不能解析 |
 | `422` | `PDF_CORRUPTED` | PDF 结构损坏 |
 | `422` | `PDF_NO_EXTRACTABLE_TEXT` | 扫描件或没有有效文本 |
+| `422` | `PDF_TEXT_TOO_LONG` | 清洗后文本超过 100,000 字符 |
 
 AI 故障但规则降级成功时仍返回 `201`，并设置 `degraded=true`。只有 PDF 解析等不可降级的核心步骤失败时才返回错误。
 

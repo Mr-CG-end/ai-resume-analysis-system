@@ -19,7 +19,13 @@ def _test_app(parser: Callable[..., ParsedPdf]) -> FastAPI:
 
     @application.post("/internal/pdf")
     async def parse_upload(request: Request) -> dict[str, object]:
-        parsed = await parse_pdf_upload(request, parser=parser, max_bytes=8)
+        parsed = await parse_pdf_upload(
+            request,
+            parser=parser,
+            max_bytes=8,
+            max_pages=3,
+            max_chars=100,
+        )
         return asdict(parsed)
 
     return application
@@ -57,7 +63,7 @@ def _parsed() -> ParsedPdf:
     [
         (None, None),
         (None, {"file": "not-a-file"}),
-        ([('resume', ('private-name.pdf', b'%PDF-x', 'application/pdf'))], None),
+        ([("resume", ("private-name.pdf", b"%PDF-x", "application/pdf"))], None),
     ],
 )
 async def test_missing_or_wrong_file_field_returns_file_required(
@@ -134,12 +140,16 @@ async def test_adapter_runs_parser_in_worker_thread_at_exact_size_limit() -> Non
         filename: str,
         content_type: str,
         max_bytes: int,
+        max_pages: int,
+        max_chars: int,
     ) -> ParsedPdf:
         observed.update(
             bytes=pdf_bytes,
             filename=filename,
             content_type=content_type,
             max_bytes=max_bytes,
+            max_pages=max_pages,
+            max_chars=max_chars,
             thread_id=threading.get_ident(),
         )
         return _parsed()
@@ -154,6 +164,8 @@ async def test_adapter_runs_parser_in_worker_thread_at_exact_size_limit() -> Non
     assert observed["filename"] == "sample.pdf"
     assert observed["content_type"] == "application/pdf"
     assert observed["max_bytes"] == 8
+    assert observed["max_pages"] == 3
+    assert observed["max_chars"] == 100
     assert observed["thread_id"] != caller_thread_id
 
 
@@ -229,15 +241,15 @@ async def test_success_returns_internal_parsed_pdf_without_mounting_public_route
         "filename": "sample.pdf",
         "content_type": "application/pdf",
         "max_bytes": 8,
+        "max_pages": 3,
+        "max_chars": 100,
         "pdf_bytes": b"%PDF-ok",
     }
 
     from app.main import create_app
 
     production_transport = httpx.ASGITransport(app=create_app())
-    async with httpx.AsyncClient(
-        transport=production_transport, base_url="http://test"
-    ) as client:
+    async with httpx.AsyncClient(transport=production_transport, base_url="http://test") as client:
         public_response = await client.post(
             "/api/v1/resumes",
             files=[("file", ("sample.pdf", b"%PDF-ok", "application/pdf"))],

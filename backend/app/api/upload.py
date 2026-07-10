@@ -19,6 +19,8 @@ class PdfParser(Protocol):
         filename: str,
         content_type: str,
         max_bytes: int,
+        max_pages: int,
+        max_chars: int,
     ) -> ParsedPdf: ...
 
 
@@ -54,6 +56,8 @@ async def parse_pdf_upload(
     *,
     parser: PdfParser = parse_pdf,
     max_bytes: int = 10 * 1024 * 1024,
+    max_pages: int = 30,
+    max_chars: int = 100_000,
 ) -> ParsedPdf:
     async with request.form() as form:
         file_parts = [
@@ -80,4 +84,6 @@ async def parse_pdf_upload(
             filename=upload.filename or "",
             content_type=upload.content_type or "",
             max_bytes=max_bytes,
+            max_pages=max_pages,
+            max_chars=max_chars,
         )

@@ -54,9 +54,7 @@ async def domain_error_handler(request: Request, exc: Exception) -> JSONResponse
     )
 
 
-async def request_validation_error_handler(
-    request: Request, exc: Exception
-) -> JSONResponse:
+async def request_validation_error_handler(request: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, RequestValidationError):
         raise exc
     del exc

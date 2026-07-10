@@ -283,4 +283,12 @@ async def test_request_id_middleware_preserves_http_exception_semantics() -> Non
     assert response.status_code == 418
     assert response.headers["X-Request-ID"] == "req-http-exception"
     assert response.headers["X-Teapot"] == "short-and-stout"
-    assert response.json() == {"detail": "still a teapot"}
+    assert response.json() == {
+        "error": {
+            "code": "HTTP_418",
+            "message": "请求无法处理。",
+            "request_id": "req-http-exception",
+            "details": {},
+        }
+    }
+    assert "still a teapot" not in response.text

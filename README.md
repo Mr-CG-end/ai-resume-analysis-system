@@ -1,28 +1,77 @@
 # 智能简历分析系统
 
-本仓库用于实现《星使实习生笔试题》中的“AI 赋能的智能简历分析系统”。当前阶段已经完成需求拆解和技术设计，后续开发应以 `docs/` 中的文档为准。
+本仓库包含 FastAPI 后端、React/Vite 前端及配套工程规范。前后端在本机直接运行；Docker Compose 仅提供可选的 Redis 7 缓存。
 
-## 文档索引
+## 环境要求
 
-| 文档 | 用途 |
-| --- | --- |
-| [需求规格](docs/01-requirements.md) | 明确目标、范围、优先级和验收条件 |
-| [系统设计](docs/02-system-design.md) | 说明架构边界、数据流、模块职责和关键决策 |
-| [API 契约](docs/03-api-contract.md) | 固定接口、字段、状态码和评分口径 |
-| [工程规范](docs/04-engineering-standards.md) | 约束目录、代码质量、配置、日志和 Git 协作 |
-| [测试与验收规范](docs/05-testing-and-acceptance.md) | 定义测试分层、关键场景和发布门槛 |
-| [部署规范](docs/06-deployment-specification.md) | 约束本地环境、阿里云 FC 和 GitHub Pages 部署 |
+- Python 3.11 或更高版本
+- Node.js 22 与 pnpm 10
+- Docker Desktop（仅在需要 Redis 缓存时使用）
 
-## 已确认的实现边界
+## 本地开发
 
-系统采用两阶段同步流程：后端先解析 PDF 并返回 `resume_snapshot`，前端在内存中保存快照，再连同岗位描述提交评分。该方案不依赖 Serverless 实例内存，Redis 只用于缓存，故障时不影响核心流程。
+Redis 是可选依赖。需要验证缓存时，在仓库根目录执行：
 
-本地开发不要求把前后端放入 Docker。前端与后端直接运行，Docker Compose 仅启动 Redis；后端发布到阿里云函数计算时使用自定义容器镜像，确保 PyMuPDF 等依赖在开发与生产环境中保持一致。
+```bash
+docker compose up -d redis
+docker compose ps
+```
 
-## 文档状态
+后端在本机运行：
 
-- 版本：`0.1.0`
-- 状态：需求与设计基线已确认
-- 更新日期：2026-07-10
-- 原始题目：[星使实习生笔试题](https://www.yuque.com/gorgearyang/kb/fzzqma9k1gngf7gv?singleDoc#)
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+Copy-Item .env.example .env
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
 
+前端在另一个终端运行：
+
+```powershell
+cd frontend
+pnpm install --frozen-lockfile
+Copy-Item .env.example .env.local
+pnpm dev
+```
+
+后端 `.env` 需要配置 AI 服务和 CORS；仅在启用缓存时配置 `REDIS_URL`。前端 `.env.local` 只配置公开的 `VITE_API_BASE_URL`，不得包含任何密钥。
+
+## 验证
+
+在仓库根目录验证基础设施配置：
+
+```bash
+backend/.venv/Scripts/python -m pytest tests/test_infrastructure.py -v
+backend/.venv/Scripts/python scripts/validate_infrastructure.py
+docker compose config
+```
+
+后端质量检查：
+
+```bash
+cd backend
+ruff check .
+mypy app
+pytest
+```
+
+前端质量检查：
+
+```bash
+cd frontend
+pnpm lint
+pnpm typecheck
+pnpm test --run
+pnpm build
+```
+
+## 部署分工
+
+- 后端：`backend/Dockerfile` 构建 Python 3.12 slim 镜像，服务监听 `0.0.0.0:9000`，供阿里云 Function Compute 自定义容器部署。镜像发布和 FC 配置由部署人员执行。
+- 前端：`.github/workflows/pages.yml` 从 `frontend/` 构建并上传 Pages artifact，仓库子路径由 `VITE_BASE_PATH` 注入，公开 API 地址由仓库变量 `VITE_API_BASE_URL` 注入。
+- CI：`.github/workflows/ci.yml` 在 push 和 pull request 上检查后端 pytest/Ruff/mypy 以及前端 lint/typecheck/test/build。
+
+这些文件提供可重复的构建和部署流程，不表示当前版本已经发布到线上。完整需求、架构、测试和部署约束见 [`docs/`](docs/)。

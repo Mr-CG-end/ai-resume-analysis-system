@@ -1,0 +1,1 @@
+"""Xingshi resume analysis API."""

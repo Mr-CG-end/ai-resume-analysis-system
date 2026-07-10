@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     ai_api_key: str | None = None
     ai_base_url: str | None = None
     ai_model: str | None = None
-    ai_timeout_seconds: float = Field(default=20.0, gt=0)
+    ai_timeout_seconds: float = Field(default=20.0, gt=0, le=60, allow_inf_nan=False)
     redis_url: str | None = None
     max_pdf_bytes: int = 10_485_760
     max_pdf_pages: int = 30

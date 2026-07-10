@@ -12,6 +12,7 @@ from app.schemas.ai_profile import AiProfilePayload
 from app.services.profile import AiExtractionError
 
 PROMPT_VERSION: Final = "profile-v1"
+MAX_AI_RESPONSE_BYTES: Final = 1_048_576
 _RETRYABLE_STATUS_CODES: Final = frozenset({408, 429, 500, 502, 503, 504})
 _SAFE_ERROR_MESSAGE: Final = "AI profile extraction failed"
 
@@ -52,28 +53,32 @@ class OpenAiProfileExtractor:
             for attempt in range(2):
                 try:
                     async with asyncio.timeout(timeout_seconds):
-                        response = await client.post(
+                        async with client.stream(
+                            "POST",
                             endpoint,
                             headers=headers,
                             json=request_body,
-                        )
+                        ) as response:
+                            if response.status_code in _RETRYABLE_STATUS_CODES:
+                                raise _RetryableResponseError
+                            if 400 <= response.status_code < 500:
+                                raise AiExtractionError(_SAFE_ERROR_MESSAGE)
+                            try:
+                                response.raise_for_status()
+                            except httpx.HTTPStatusError:
+                                raise AiExtractionError(_SAFE_ERROR_MESSAGE) from None
 
-                    if response.status_code in _RETRYABLE_STATUS_CODES:
-                        raise _RetryableResponseError
-                    if 400 <= response.status_code < 500:
-                        raise AiExtractionError(_SAFE_ERROR_MESSAGE)
-                    try:
-                        response.raise_for_status()
-                    except httpx.HTTPStatusError:
-                        raise AiExtractionError(_SAFE_ERROR_MESSAGE) from None
+                            response_body = await self._read_response_body(response)
 
-                    return self._parse_payload(response)
+                        return await asyncio.to_thread(self._parse_payload, response_body)
                 except AiExtractionError:
                     raise
                 except (
                     TimeoutError,
                     httpx.TransportError,
+                    httpx.DecodingError,
                     _RetryableResponseError,
+                    UnicodeDecodeError,
                     json.JSONDecodeError,
                     ValidationError,
                 ):
@@ -107,8 +112,17 @@ class OpenAiProfileExtractor:
         }
 
     @staticmethod
-    def _parse_payload(response: httpx.Response) -> AiProfilePayload:
-        body = response.json()
+    async def _read_response_body(response: httpx.Response) -> bytes:
+        body = bytearray()
+        async for chunk in response.aiter_bytes():
+            if len(body) + len(chunk) > MAX_AI_RESPONSE_BYTES:
+                raise _RetryableResponseError
+            body.extend(chunk)
+        return bytes(body)
+
+    @staticmethod
+    def _parse_payload(response_body: bytes) -> AiProfilePayload:
+        body = json.loads(response_body.decode("utf-8"))
         if not isinstance(body, dict):
             raise _RetryableResponseError
         choices = body.get("choices")

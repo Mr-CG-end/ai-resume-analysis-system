@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import gzip
 import json
-from collections.abc import Callable
+import time
+from collections.abc import AsyncIterator, Callable
 
 import httpx
 import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
-from app.services.ai_profile import AiExtractionError, OpenAiProfileExtractor
+from app.services.ai_profile import (
+    MAX_AI_RESPONSE_BYTES,
+    AiExtractionError,
+    OpenAiProfileExtractor,
+)
 
 VALID_PAYLOAD: dict[str, object] = {
     "name": {"value": "张三", "evidence": "姓名：张三"},
@@ -42,6 +49,33 @@ def _completion(payload: object = VALID_PAYLOAD) -> httpx.Response:
     )
 
 
+def _completion_bytes(payload: object = VALID_PAYLOAD) -> bytes:
+    return json.dumps(
+        {"choices": [{"message": {"content": json.dumps(payload)}}]},
+        separators=(",", ":"),
+    ).encode()
+
+
+def _sized_completion(size: int) -> bytes:
+    body = _completion_bytes()
+    assert len(body) <= size
+    return body + (b" " * (size - len(body)))
+
+
+class ClosingByteStream(httpx.AsyncByteStream):
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = chunks
+        self.closed = False
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        for chunk in self._chunks:
+            await asyncio.sleep(0)
+            yield chunk
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
 class ClosingMockTransport(httpx.MockTransport):
     closed = False
 
@@ -66,9 +100,14 @@ def test_ai_configured_requires_complete_nonblank_tuple(
     assert _settings(**overrides).ai_configured is configured
 
 
-def test_ai_timeout_must_be_positive() -> None:
+@pytest.mark.parametrize(
+    "timeout_seconds",
+    [0, 61, float("inf"), float("-inf"), float("nan")],
+    ids=["zero", "above-maximum", "positive-infinity", "negative-infinity", "nan"],
+)
+def test_ai_timeout_must_be_finite_and_within_range(timeout_seconds: float) -> None:
     with pytest.raises(ValidationError):
-        _settings(ai_timeout_seconds=0)
+        _settings(ai_timeout_seconds=timeout_seconds)
 
 
 @pytest.mark.asyncio
@@ -166,6 +205,99 @@ async def test_extract_retries_invalid_provider_response(
     ).extract("resume")
 
     assert result.name.value == "张三"
+    assert attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_extract_accepts_exactly_one_mib_decompressed_response_in_chunks() -> None:
+    body = _sized_completion(MAX_AI_RESPONSE_BYTES)
+    stream = ClosingByteStream([body[:17], body[17:524_289], body[524_289:]])
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, stream=stream)
+
+    result = await OpenAiProfileExtractor(
+        _settings(), transport=httpx.MockTransport(handler)
+    ).extract("resume")
+
+    assert result.name.value == "张三"
+    assert stream.closed is True
+
+
+@pytest.mark.asyncio
+async def test_extract_retries_response_one_byte_over_decompressed_limit() -> None:
+    compressed = gzip.compress(_sized_completion(MAX_AI_RESPONSE_BYTES + 1))
+    attempts = 0
+    streams: list[ClosingByteStream] = []
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        midpoint = len(compressed) // 2
+        stream = ClosingByteStream([compressed[:midpoint], compressed[midpoint:]])
+        streams.append(stream)
+        return httpx.Response(
+            200,
+            headers={"Content-Encoding": "gzip"},
+            stream=stream,
+        )
+
+    with pytest.raises(AiExtractionError, match="^AI profile extraction failed$"):
+        await OpenAiProfileExtractor(_settings(), transport=httpx.MockTransport(handler)).extract(
+            "resume"
+        )
+
+    assert attempts == 2
+    assert all(stream.closed for stream in streams)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid_body",
+    [b"\xff", b"not-json"],
+    ids=["invalid-utf8", "non-json"],
+)
+async def test_extract_retries_invalid_encoding_or_json_twice_then_fails(
+    invalid_body: bytes,
+) -> None:
+    attempts = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(200, content=invalid_body)
+
+    with pytest.raises(AiExtractionError, match="^AI profile extraction failed$"):
+        await OpenAiProfileExtractor(_settings(), transport=httpx.MockTransport(handler)).extract(
+            "resume"
+        )
+
+    assert attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_extract_timeout_covers_response_parsing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts = 0
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return _completion()
+
+    def slow_parse(_: bytes) -> object:
+        time.sleep(0.05)
+        return VALID_PAYLOAD
+
+    monkeypatch.setattr(OpenAiProfileExtractor, "_parse_payload", staticmethod(slow_parse))
+
+    with pytest.raises(AiExtractionError, match="^AI profile extraction failed$"):
+        await OpenAiProfileExtractor(
+            _settings(ai_timeout_seconds=0.01),
+            transport=httpx.MockTransport(handler),
+        ).extract("resume")
+
     assert attempts == 2
 
 

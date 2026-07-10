@@ -75,6 +75,12 @@ async def test_health_is_unavailable_when_ai_is_missing() -> None:
             ai_api_key="test-key",
             ai_model="test-model",
         ),
+        Settings(
+            _env_file=None,
+            ai_api_key="",
+            ai_base_url="",
+            ai_model="",
+        ),
     ],
 )
 async def test_health_is_unavailable_when_ai_configuration_is_partial(

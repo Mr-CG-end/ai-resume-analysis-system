@@ -175,25 +175,43 @@ async def test_request_id_generates_uuid_when_missing_or_invalid(request_id: str
 
 
 @pytest.mark.asyncio
-async def test_request_id_is_preserved_on_unhandled_server_error() -> None:
+async def test_unhandled_server_error_uses_safe_contract_and_request_id(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     from app.main import create_app
 
     test_app: FastAPI = create_app()
 
-    @test_app.get("/test/unhandled")
+    @test_app.post("/test/unhandled")
     async def raise_unhandled_error() -> None:
-        raise RuntimeError("unexpected failure")
+        raise RuntimeError("secret-token=must-not-appear")
 
-    transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=False)
+    transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=True)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get(
+        response = await client.post(
             "/test/unhandled",
             headers={"X-Request-ID": "req-unhandled-500"},
+            content="resume-secret-body",
         )
 
     assert response.status_code == 500
     assert response.headers["X-Request-ID"] == "req-unhandled-500"
-    assert response.text == "Internal Server Error"
+    assert response.json() == {
+        "error": {
+            "code": "INTERNAL_SERVER_ERROR",
+            "message": "服务器内部错误，请稍后重试。",
+            "request_id": "req-unhandled-500",
+            "details": {},
+        }
+    }
+    assert any(
+        record.getMessage() == "unhandled_request_error request_id=req-unhandled-500 method=POST"
+        for record in caplog.records
+    )
+    assert "resume-secret-body" not in caplog.text
+    assert "secret-token" not in caplog.text
+    assert "must-not-appear" not in caplog.text
+    assert "must-not-appear" not in response.text
 
 
 @pytest.mark.asyncio
@@ -204,7 +222,11 @@ async def test_request_id_middleware_preserves_http_exception_semantics() -> Non
 
     @test_app.get("/test/teapot")
     async def raise_http_exception() -> None:
-        raise HTTPException(status_code=418, detail="still a teapot")
+        raise HTTPException(
+            status_code=418,
+            detail="still a teapot",
+            headers={"X-Teapot": "short-and-stout"},
+        )
 
     transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=False)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -215,4 +237,5 @@ async def test_request_id_middleware_preserves_http_exception_semantics() -> Non
 
     assert response.status_code == 418
     assert response.headers["X-Request-ID"] == "req-http-exception"
+    assert response.headers["X-Teapot"] == "short-and-stout"
     assert response.json() == {"detail": "still a teapot"}

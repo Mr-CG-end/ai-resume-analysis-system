@@ -439,8 +439,10 @@ async def test_invalid_multipart_body_maps_to_safe_error_without_parser_detail(
     }
     assert response.headers["X-Request-ID"] == "req-invalid-multipart-body"
     assert "private-malformed-body" not in response.text
-    record_data = str(caplog.records[-1].__dict__)
+    record_data = "\n".join(str(record.__dict__) for record in caplog.records)
     assert "private-malformed-body" not in record_data
+    assert "expected boundary" not in record_data.lower()
+    assert "boundary character" not in record_data.lower()
 
 
 @pytest.mark.asyncio

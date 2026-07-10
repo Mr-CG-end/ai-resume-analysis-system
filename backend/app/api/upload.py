@@ -1,3 +1,4 @@
+import logging
 from typing import Protocol
 
 from fastapi import Request
@@ -15,6 +16,14 @@ READ_CHUNK_BYTES = 64 * 1024
 MULTIPART_ENVELOPE_BYTES = 64 * 1024
 MAX_MULTIPART_FILES = 2
 MAX_MULTIPART_FIELDS = 10
+
+
+class _SuppressMultipartParserLogs(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return False
+
+
+logging.getLogger("python_multipart.multipart").addFilter(_SuppressMultipartParserLogs())
 
 
 class _RequestBodyTooLarge(MultiPartException):

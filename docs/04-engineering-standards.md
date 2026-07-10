@@ -11,7 +11,7 @@ Python 3.12.13 是本地开发、CI 与生产镜像的统一解释器版本。
 | 层次 | 基线 |
 | --- | --- |
 | Python | 3.12.13，开发、CI 与生产镜像使用同一精确版本 |
-| 后端 | FastAPI、Pydantic v2、PyMuPDF、redis-py |
+| 后端 | FastAPI、Pydantic v2、pypdf、redis-py |
 | Node.js | 22 LTS |
 | 前端 | React、TypeScript strict、Vite、pnpm |
 | 后端测试 | pytest、pytest-asyncio、httpx |
@@ -59,6 +59,7 @@ docker-compose.yml       # 仅用于本地 Redis
 - Pydantic Schema 使用明确字段，不把业务响应退化为 `dict[str, Any]`。
 - 对可预期失败使用项目错误类型，由统一异常处理器映射为 API 错误；禁止在路由中散落宽泛的 `except Exception`。
 - 文件、PDF 文档对象和网络客户端使用上下文管理器或 `finally` 释放。
+- pypdf 以严格模式读取；进程级解压流限制固定为 50 MiB，业务代码另行累计内容流和原始字符预算，不得通过放宽库级限制绕过资源门禁。
 - AI Prompt 与输出 Schema 分离；Prompt 需要版本常量，版本变化同步更新缓存版本。
 - 评分函数保持纯函数，同一输入必须产生同一总分。
 - Ruff 负责格式化和静态检查，mypy 对 `app/` 执行严格类型检查。

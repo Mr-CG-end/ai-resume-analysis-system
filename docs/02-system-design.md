@@ -98,6 +98,8 @@ match:{resume_hash}:{jd_hash}:{score_version}
 
 两类缓存的 TTL 均为 24 小时，不保存原始 PDF。Redis 的连接、读取、反序列化和写入异常都转化为缓存未命中；业务响应通过 `cached` 字段说明是否命中，但不会把 Redis 异常暴露给使用者。
 
+Redis 属于后端可信边界，只能由 API 使用受限凭据访问，不得暴露到浏览器或公网。缓存键同时绑定输入哈希、PDF/规则算法版本和对应 Prompt 版本；Prompt 或评分策略升级会自动使用新命名空间。缓存载荷仍须通过严格 Schema、降级状态和当前输入的确定性复核。若 Redis 凭据可能泄露，应先轮换凭据并清空缓存；本版本不把已被攻击者取得写权限的 Redis 视为可信数据源。
+
 ## 前端状态模型
 
 单页界面包含四种显式状态：`idle`、`parsing`、`ready` 和 `matching`。解析完成后，`resume_snapshot` 只存在于页面内存中；刷新页面或点击重新分析时清除。界面不能把完整简历写入 Local Storage、Session Storage 或日志。

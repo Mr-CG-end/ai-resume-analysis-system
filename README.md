@@ -37,7 +37,7 @@ Copy-Item .env.example .env.local
 pnpm dev
 ```
 
-复制后的 `.env` 默认将 `AI_API_KEY`、`AI_BASE_URL` 和 `AI_MODEL` 留空，使用真实模型前需在本地填写这三项（不得提交）。后端仅在三项均为非空值时将 AI 健康状态报告为可用；单次模型调用默认超时 20 秒，可通过 `AI_TIMEOUT_SECONDS` 调整为大于 0 且不超过 60 秒。模型接口采用 OpenAI 兼容的 `/chat/completions` 协议，响应解压后最多接收 1 MiB。仅在启用缓存时配置 `REDIS_URL`。CORS 白名单将在后续集成阶段实现。前端 `.env.local` 只配置公开的 `VITE_API_BASE_URL`，不得包含任何密钥。
+复制后的 `.env` 默认将 `AI_API_KEY`、`AI_BASE_URL` 和 `AI_MODEL` 留空，使用真实模型前需在本地填写这三项（不得提交）。后端仅在三项均为非空值时将 AI 健康状态报告为可用；单次模型调用默认超时 20 秒，可通过 `AI_TIMEOUT_SECONDS` 调整为大于 0 且不超过 60 秒。模型接口采用 OpenAI 兼容的 `/chat/completions` 协议，响应解压后最多接收 1 MiB。仅在启用缓存时配置 `REDIS_URL`；缓存 TTL 默认 86,400 秒，可通过 `CACHE_TTL_SECONDS` 调整。Redis 连接、读取、坏数据或写入失败都会旁路为缓存未命中，不阻断业务。CORS 白名单将在后续集成阶段实现。前端 `.env.local` 只配置公开的 `VITE_API_BASE_URL`，不得包含任何密钥。
 
 ## 验证
 

@@ -96,7 +96,8 @@ API 基础路径为 `/api/v1`，请求和响应使用 UTF-8。除文件上传外
 - `cleaned_text` 与 `document.character_count` 一致，长度为 1 至 100,000 字符，不得静默截断。
 - `profile` 的全部字段始终存在；缺失标量为 `null`，缺失数组为 `[]`。
 - 正常 AI 提取设置 `degraded=false`；规则降级设置 `degraded=true` 并包含 `ai_extraction_fallback`。
-- 阶段 3 固定 `cached=false`，缓存语义在阶段 5 实现。
+- 首次计算或缓存不可用时 `cached=false`；命中经严格 Schema 校验的 24 小时缓存时
+  `cached=true`。命中不会复用旧 `resume_id`，并保留本次上传的文件名。
 
 示例：
 
@@ -224,6 +225,9 @@ overall = decimal_round_half_up(0.6 × skill_match + 0.4 × experience_relevance
 | `422` | `JD_KEYWORDS_NOT_FOUND` | 无法从 JD 提取可用于评分的关键词 |
 
 AI 失败且规则评分可用时返回成功响应，并设置 `method=rule_fallback`、`degraded=true`。
+首次计算或缓存不可用时 `cached=false`；相同业务快照与规范化 JD 命中经严格校验的
+24 小时缓存时 `cached=true`。命中会重新生成 `match_id`，并绑定本次请求的 `resume_id`。
+降级结果同样可以缓存，并在命中后保持原有 `degraded`、`method` 和 `warnings` 语义。
 
 ## 健康检查
 

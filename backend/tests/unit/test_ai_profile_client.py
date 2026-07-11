@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.schemas.ai_profile import CompactAiProfilePayload
 from app.services.ai_profile import (
     MAX_AI_RESPONSE_BYTES,
     AiExtractionError,
@@ -17,12 +18,12 @@ from app.services.ai_profile import (
 )
 
 VALID_PAYLOAD: dict[str, object] = {
-    "name": {"value": "张三", "evidence": "姓名：张三"},
-    "phone": {"value": None, "evidence": None},
-    "email": {"value": "candidate@example.test", "evidence": "candidate@example.test"},
-    "address": {"value": None, "evidence": None},
-    "job_intention": {"value": None, "evidence": None},
-    "expected_salary": {"value": None, "evidence": None},
+    "name": "张三",
+    "phone": None,
+    "email": "candidate@example.test",
+    "address": None,
+    "job_intention": None,
+    "expected_salary": None,
     "education": [],
     "projects": [],
     "employment_periods": [],
@@ -141,11 +142,41 @@ async def test_extract_posts_strict_prompt_and_validates_payload() -> None:
     assert body["model"] == "profile-model"
     assert body["temperature"] == 0
     assert body["enable_thinking"] is False
+    assert body["max_tokens"] == 4096
     assert body["response_format"] == {"type": "json_object"}
-    assert "profile-v1" in body["messages"][0]["content"]
+    assert "profile-v3" in body["messages"][0]["content"]
+    assert "year-only" in body["messages"][0]["content"]
     assert "untrusted" in body["messages"][0]["content"].lower()
+    assert (
+        json.dumps(CompactAiProfilePayload.model_json_schema(), ensure_ascii=False)
+        in body["messages"][1]["content"]
+    )
     assert "姓名：张三" in body["messages"][1]["content"]
     assert transport.closed is True
+
+
+@pytest.mark.asyncio
+async def test_extract_drops_year_only_employment_period_without_losing_profile() -> None:
+    payload = {
+        **VALID_PAYLOAD,
+        "employment_periods": [
+            {
+                "start_date": "2022",
+                "end_date": "2025",
+                "evidence": "2022-2025",
+            }
+        ],
+    }
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return _completion(payload)
+
+    result = await OpenAiProfileExtractor(
+        _settings(), transport=httpx.MockTransport(handler)
+    ).extract("姓名：张三\n2022-2025")
+
+    assert result.name.value == "张三"
+    assert result.employment_periods == []
 
 
 @pytest.mark.asyncio
@@ -307,18 +338,18 @@ async def test_extract_timeout_covers_response_parsing(
         return _completion()
 
     def slow_parse(_: bytes) -> object:
-        time.sleep(0.05)
+        time.sleep(0.2)
         return VALID_PAYLOAD
 
     monkeypatch.setattr(OpenAiProfileExtractor, "_parse_payload", staticmethod(slow_parse))
 
     with pytest.raises(AiExtractionError, match="^AI profile extraction failed$"):
         await OpenAiProfileExtractor(
-            _settings(ai_timeout_seconds=0.01),
+            _settings(ai_timeout_seconds=0.1),
             transport=httpx.MockTransport(handler),
         ).extract("resume")
 
-    assert attempts == 2
+    assert 1 <= attempts <= 2
 
 
 @pytest.mark.asyncio

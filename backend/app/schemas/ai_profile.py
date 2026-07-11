@@ -66,3 +66,41 @@ class AiProfilePayload(AiSchemaModel):
     education: list[AiEducation] = Field(max_length=50)
     projects: list[AiProject] = Field(max_length=50)
     employment_periods: list[AiEmploymentPeriod] = Field(max_length=50)
+
+
+class CompactAiEducation(AiSchemaModel):
+    school: NonEmptyText | None = None
+    degree: NonEmptyText | None = None
+    major: NonEmptyText | None = None
+    start_date: NonEmptyText | None = None
+    end_date: NonEmptyText | None = None
+
+
+class CompactAiProject(AiSchemaModel):
+    name: NonEmptyText | None = None
+    role: NonEmptyText | None = None
+    description: NonEmptyText | None = None
+    technologies: list[NonEmptyText] = Field(default_factory=list, max_length=100)
+
+
+class CompactAiEmploymentPeriod(AiSchemaModel):
+    start_date: NonEmptyText
+    end_date: NonEmptyText
+    evidence: NonEmptyText
+
+
+class CompactAiProfilePayload(AiSchemaModel):
+    """Compact provider payload whose non-null values are their own exact evidence."""
+
+    name: NonEmptyText | None = None
+    phone: NonEmptyText | None = None
+    email: NonEmptyText | None = None
+    address: NonEmptyText | None = None
+    job_intention: NonEmptyText | None = None
+    expected_salary: NonEmptyText | None = None
+    education: list[CompactAiEducation] = Field(default_factory=list, max_length=50)
+    projects: list[CompactAiProject] = Field(default_factory=list, max_length=50)
+    employment_periods: list[CompactAiEmploymentPeriod] = Field(
+        default_factory=list,
+        max_length=50,
+    )

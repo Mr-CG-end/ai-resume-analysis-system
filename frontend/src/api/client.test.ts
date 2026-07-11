@@ -97,6 +97,62 @@ describe('API 客户端', () => {
     )
   })
 
+  it('拒绝缺少核心嵌套字段的简历成功响应', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ...resumeSnapshotFixture,
+            profile: { ...resumeSnapshotFixture.profile, projects: null },
+          }),
+          {
+            status: 201,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Request-ID': 'req-invalid-resume',
+            },
+          },
+        ),
+      ),
+    )
+
+    await expect(
+      createResume(
+        new File(['%PDF-1.7'], 'resume.pdf', { type: 'application/pdf' }),
+      ),
+    ).rejects.toMatchObject({
+      status: 201,
+      code: 'INVALID_RESPONSE',
+      requestId: 'req-invalid-resume',
+    })
+  })
+
+  it('拒绝字段类型错误的匹配成功响应', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ...matchResponseFixture,
+            scores: { ...matchResponseFixture.scores, overall: '62' },
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    )
+
+    await expect(
+      createMatch({
+        resume_snapshot: resumeSnapshotFixture,
+        job_description: '招聘 Python 后端工程师，需要 Redis 项目经验。',
+      }),
+    ).rejects.toMatchObject({
+      status: 201,
+      code: 'INVALID_RESPONSE',
+    })
+  })
+
   it('保留请求取消异常供页面忽略迟到响应', async () => {
     const abortError = new DOMException('aborted', 'AbortError')
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abortError))

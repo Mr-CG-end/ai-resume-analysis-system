@@ -1,0 +1,54 @@
+.panel {
+  display: grid;
+  gap: 20px;
+  padding: clamp(20px, 4vw, 32px);
+  border: 1px solid #dce4e1;
+  border-radius: 18px;
+  background: #fff;
+}
+
+.heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.heading h2,
+.heading p {
+  margin: 0;
+}
+
+.kicker {
+  margin-bottom: 6px !important;
+  color: #33745a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.help {
+  color: #66736f;
+  font-size: 14px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status {
+  min-height: 22px;
+  color: #53625d;
+  font-size: 14px;
+}
+
+@media (max-width: 520px) {
+  .heading,
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

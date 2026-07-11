@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
+from typing import Literal, Protocol
 
+from app.schemas.ai_match import AiExperiencePayload
+from app.services.ai_match import AiMatchingError
 from app.services.jd import (
     RESPONSIBILITY_ALIASES,
     SKILL_ALIASES,
@@ -18,6 +21,18 @@ class DeterministicMatch:
     skill_score: int
     experience_score: int
     overall_score: int
+
+
+@dataclass(frozen=True, slots=True)
+class MatchAnalysis(DeterministicMatch):
+    evidence: tuple[str, ...]
+    method: Literal["hybrid", "rule_fallback"]
+    warnings: tuple[Literal["ai_matching_fallback"], ...]
+    degraded: bool
+
+
+class ExperienceAnalyzer(Protocol):
+    async def analyze(self, job_description: str, cleaned_text: str) -> AiExperiencePayload: ...
 
 
 def _round_score(value: Decimal) -> int:
@@ -60,4 +75,53 @@ def score_deterministic_match(
         skill_score=skill_score,
         experience_score=experience_score,
         overall_score=calculate_overall_score(skill_score, experience_score),
+    )
+
+
+def _fallback_analysis(deterministic: DeterministicMatch) -> MatchAnalysis:
+    return MatchAnalysis(
+        matched_keywords=deterministic.matched_keywords,
+        missing_keywords=deterministic.missing_keywords,
+        skill_score=deterministic.skill_score,
+        experience_score=deterministic.experience_score,
+        overall_score=deterministic.overall_score,
+        evidence=(),
+        method="rule_fallback",
+        warnings=("ai_matching_fallback",),
+        degraded=True,
+    )
+
+
+async def analyze_match(
+    *,
+    keywords: JdKeywords,
+    job_description: str,
+    cleaned_text: str,
+    analyzer: ExperienceAnalyzer | None,
+) -> MatchAnalysis:
+    """Combine deterministic skills with verified AI experience evidence."""
+    deterministic = score_deterministic_match(keywords, cleaned_text)
+    if analyzer is None:
+        return _fallback_analysis(deterministic)
+
+    try:
+        payload = await analyzer.analyze(job_description, cleaned_text)
+    except AiMatchingError:
+        return _fallback_analysis(deterministic)
+
+    evidence = tuple(dict.fromkeys(item for item in payload.evidence if item.strip()))
+    if not evidence or any(item not in cleaned_text for item in evidence):
+        return _fallback_analysis(deterministic)
+
+    experience_score = payload.experience_relevance
+    return MatchAnalysis(
+        matched_keywords=deterministic.matched_keywords,
+        missing_keywords=deterministic.missing_keywords,
+        skill_score=deterministic.skill_score,
+        experience_score=experience_score,
+        overall_score=calculate_overall_score(deterministic.skill_score, experience_score),
+        evidence=evidence,
+        method="hybrid",
+        warnings=(),
+        degraded=False,
     )

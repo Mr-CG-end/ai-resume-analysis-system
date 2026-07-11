@@ -75,3 +75,21 @@ class PdfProcessingLimitExceededError(PdfProcessingError):
     code = "PDF_PROCESSING_LIMIT_EXCEEDED"
     message = "PDF 处理所需资源超过安全限制。"
     status_code = 422
+
+
+class JdTooShortError(DomainError):
+    code = "JD_TOO_SHORT"
+    message = "岗位描述至少需要 20 个字符。"
+    status_code = 400
+
+
+class JdTooLongError(DomainError):
+    code = "JD_TOO_LONG"
+    message = "岗位描述不能超过 10,000 个字符。"
+    status_code = 400
+
+
+class JdKeywordsNotFoundError(DomainError):
+    code = "JD_KEYWORDS_NOT_FOUND"
+    message = "岗位描述中未找到可用于评分的关键词。"
+    status_code = 422

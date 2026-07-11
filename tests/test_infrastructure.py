@@ -88,7 +88,7 @@ def test_ci_runs_backend_root_and_frontend_checks_on_python_3_12_13() -> None:
     ]
     assert infrastructure_commands == [
         'python -m pip install -e "./backend[dev]"',
-        "pytest tests/test_infrastructure.py",
+        "python -m pytest tests/test_infrastructure.py",
         "python scripts/validate_infrastructure.py",
     ]
 

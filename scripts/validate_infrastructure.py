@@ -246,7 +246,7 @@ def _validate_ci(ci: str, errors: list[str]) -> None:
             None,
             [
                 'python -m pip install -e "./backend[dev]"',
-                "pytest tests/test_infrastructure.py",
+                "python -m pytest tests/test_infrastructure.py",
                 "python scripts/validate_infrastructure.py",
             ],
             {"actions/checkout@v7", "actions/setup-python@v6"},

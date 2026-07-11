@@ -4,7 +4,7 @@ import styles from './ResumeUpload.module.css'
 import {
   validateResumeFiles,
   type UploadValidationError,
-} from './resumeUpload'
+} from './resumeValidation'
 
 export interface ResumeUploadProps {
   file: File | null

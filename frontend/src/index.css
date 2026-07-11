@@ -4,7 +4,7 @@
     BlinkMacSystemFont, "Segoe UI",
     sans-serif;
   color: #172033;
-  background: #eef1f2;
+  background: #e8eeec;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -17,6 +17,9 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background:
+    radial-gradient(circle at 8% 0%, rgb(45 128 94 / 9%), transparent 28rem),
+    #e8eeec;
 }
 
 body,

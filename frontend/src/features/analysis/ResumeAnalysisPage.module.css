@@ -1,0 +1,131 @@
+.shell {
+  min-height: 100vh;
+  padding: clamp(16px, 4vw, 48px);
+}
+
+.workspace {
+  width: min(100%, 1120px);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #d7dfdc;
+  border-radius: 26px;
+  background: #edf2f0;
+  box-shadow: 0 28px 80px rgb(15 38 48 / 12%);
+}
+
+.hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 32px;
+  padding: clamp(32px, 6vw, 64px);
+  color: #fff;
+  background:
+    linear-gradient(120deg, rgb(14 35 51 / 98%), rgb(24 60 62 / 94%)),
+    #102f3e;
+}
+
+.hero h1,
+.hero p {
+  margin: 0;
+}
+
+.hero h1 {
+  font-size: clamp(36px, 6vw, 56px);
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+}
+
+.hero h1 span {
+  display: block;
+}
+
+.eyebrow {
+  margin-bottom: 12px !important;
+  color: #9ed8c1;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.intro {
+  max-width: 560px;
+  margin-top: 20px !important;
+  color: #d7e1df;
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.privacyNote {
+  display: grid;
+  flex: 0 0 240px;
+  gap: 6px;
+  padding-left: 20px;
+  border-left: 1px solid rgb(255 255 255 / 24%);
+  color: #c6d4d1;
+  font-size: 13px;
+}
+
+.privacyNote strong {
+  color: #fff;
+  font-size: 14px;
+}
+
+.steps {
+  padding: 28px clamp(24px, 5vw, 52px);
+  border-bottom: 1px solid #d7dfdc;
+  background: #fff;
+}
+
+.content {
+  display: grid;
+  gap: 22px;
+  padding: clamp(18px, 4vw, 36px);
+}
+
+.errorBody {
+  display: grid;
+  gap: 6px;
+}
+
+.requestId {
+  color: #687a75;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+}
+
+.footerNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #5f6e69;
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding: 0;
+  }
+
+  .workspace {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .privacyNote {
+    flex-basis: auto;
+    padding: 14px 0 0;
+    border-top: 1px solid rgb(255 255 255 / 24%);
+    border-left: 0;
+  }
+
+  .footerNote {
+    align-items: flex-start;
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_PDF_BYTES, validateResumeFiles } from './resumeUpload'
+import { MAX_PDF_BYTES, validateResumeFiles } from './resumeValidation'
 
 function pdf(name = 'resume.pdf', size = 100): File {
   return new File([new Uint8Array(size)], name, { type: 'application/pdf' })

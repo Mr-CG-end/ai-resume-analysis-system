@@ -77,7 +77,6 @@ def test_match_response_accepts_canonical_consistent_contract() -> None:
         ({"matched_keywords": ["Python", "Go"]}, "keywords"),
         ({"missing_keywords": ["Python", "Redis"]}, "keywords"),
         ({"scores": {"skill_match": 50, "experience_relevance": 80, "overall": 61}}, "overall"),
-        ({"cached": True}, "cached"),
         ({"method": "rule_fallback", "degraded": False, "warnings": []}, "rule_fallback"),
         ({"method": "hybrid", "degraded": True, "warnings": ["ai_matching_fallback"]}, "hybrid"),
     ],
@@ -87,6 +86,10 @@ def test_match_response_rejects_cross_field_contract_violations(
 ) -> None:
     with pytest.raises(ValidationError, match=message):
         MatchResponse.model_validate(_response(**changes))
+
+
+def test_stage_five_allows_valid_cached_response() -> None:
+    assert MatchResponse.model_validate(_response(cached=True)).cached is True
 
 
 def test_match_response_rejects_noncanonical_id_and_extra_fields() -> None:

@@ -20,6 +20,26 @@ def stable_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def stable_bytes_hash(value: bytes) -> str:
+    """Return a deterministic SHA-256 digest for exact binary input."""
+    return hashlib.sha256(value).hexdigest()
+
+
+def resume_snapshot_hash(snapshot: ResumeSnapshot) -> str:
+    """Hash stable resume business data while excluding request-level metadata."""
+    payload = snapshot.model_dump(mode="json", exclude={"resume_id", "cached"})
+    document = payload.get("document")
+    if isinstance(document, dict):
+        document.pop("filename", None)
+    serialized = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return stable_hash(serialized)
+
+
 def build_extract_cache_key(
     pdf_sha256: str,
     extract_version: str = DEFAULT_EXTRACT_VERSION,

@@ -207,16 +207,12 @@ def parse_pdf(
 ) -> ParsedPdf:
     """Validate and parse an in-memory PDF without persisting its contents."""
 
-    actual_bytes = len(pdf_bytes)
-    if actual_bytes > max_bytes:
-        raise PdfTooLargeError(details={"max_bytes": max_bytes, "actual_bytes": actual_bytes})
-    if Path(filename).suffix.lower() != ".pdf":
-        raise UnsupportedMediaTypeError()
-    normalized_mime = content_type.partition(";")[0].strip().lower()
-    if normalized_mime != "application/pdf":
-        raise UnsupportedMediaTypeError()
-    if not pdf_bytes.startswith(b"%PDF-"):
-        raise UnsupportedMediaTypeError()
+    validate_pdf_input(
+        pdf_bytes,
+        filename=filename,
+        content_type=content_type,
+        max_bytes=max_bytes,
+    )
 
     try:
         with BytesIO(pdf_bytes) as stream:
@@ -248,3 +244,24 @@ def parse_pdf(
         character_count=character_count,
         sha256=hashlib.sha256(pdf_bytes).hexdigest(),
     )
+
+
+def validate_pdf_input(
+    pdf_bytes: bytes,
+    *,
+    filename: str,
+    content_type: str,
+    max_bytes: int = DEFAULT_MAX_PDF_BYTES,
+) -> None:
+    """Validate transport-level PDF constraints before a possible cache lookup."""
+
+    actual_bytes = len(pdf_bytes)
+    if actual_bytes > max_bytes:
+        raise PdfTooLargeError(details={"max_bytes": max_bytes, "actual_bytes": actual_bytes})
+    if Path(filename).suffix.lower() != ".pdf":
+        raise UnsupportedMediaTypeError()
+    normalized_mime = content_type.partition(";")[0].strip().lower()
+    if normalized_mime != "application/pdf":
+        raise UnsupportedMediaTypeError()
+    if not pdf_bytes.startswith(b"%PDF-"):
+        raise UnsupportedMediaTypeError()

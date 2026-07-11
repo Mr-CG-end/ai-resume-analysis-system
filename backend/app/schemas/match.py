@@ -85,6 +85,4 @@ class MatchResponse(ContractModel):
             raise ValueError("rule_fallback requires degraded state and fallback warning")
         if self.method == "hybrid" and (self.degraded or fallback_warning):
             raise ValueError("hybrid requires non-degraded state without fallback warning")
-        if self.cached:
-            raise ValueError("cached must remain false in stage 4")
         return self

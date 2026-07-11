@@ -11,7 +11,9 @@ from app.services.cache import (
     build_match_cache_key,
     deserialize_match_response,
     deserialize_resume_snapshot,
+    resume_snapshot_hash,
     serialize_cache_payload,
+    stable_bytes_hash,
     stable_hash,
 )
 
@@ -67,6 +69,19 @@ def test_stable_hash_uses_exact_utf8_text() -> None:
     assert stable_hash("简历\nPython") == stable_hash("简历\nPython")
     assert stable_hash("简历\nPython") != stable_hash("简历 Python")
     assert len(stable_hash("简历\nPython")) == 64
+    assert stable_bytes_hash(b"pdf") != stable_bytes_hash(b"PDF")
+
+
+def test_resume_hash_excludes_request_level_metadata() -> None:
+    first = _snapshot()
+    changed = first.model_copy(
+        update={
+            "resume_id": "res_123e4567-e89b-42d3-a456-426614174000",
+            "cached": True,
+            "document": first.document.model_copy(update={"filename": "renamed.pdf"}),
+        }
+    )
+    assert resume_snapshot_hash(first) == resume_snapshot_hash(changed)
 
 
 def test_versioned_cache_keys_follow_documented_format() -> None:
@@ -75,12 +90,8 @@ def test_versioned_cache_keys_follow_documented_format() -> None:
     jd_hash = stable_hash("job description")
 
     assert build_extract_cache_key(pdf_hash) == f"extract:{pdf_hash}:v1"
-    assert build_extract_cache_key(pdf_hash, "profile-v2") == (
-        f"extract:{pdf_hash}:profile-v2"
-    )
-    assert build_match_cache_key(resume_hash, jd_hash) == (
-        f"match:{resume_hash}:{jd_hash}:v1"
-    )
+    assert build_extract_cache_key(pdf_hash, "profile-v2") == (f"extract:{pdf_hash}:profile-v2")
+    assert build_match_cache_key(resume_hash, jd_hash) == (f"match:{resume_hash}:{jd_hash}:v1")
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from typing import Protocol
 
 from fastapi import Request
@@ -55,6 +56,13 @@ class PdfParser(Protocol):
     ) -> ParsedPdf: ...
 
 
+@dataclass(frozen=True, slots=True)
+class BufferedPdfUpload:
+    pdf_bytes: bytes
+    filename: str
+    content_type: str
+
+
 class FileRequiredError(DomainError):
     code = "FILE_REQUIRED"
     message = "请上传一个 PDF 文件。"
@@ -109,6 +117,24 @@ async def parse_pdf_upload(
     max_pages: int = 30,
     max_chars: int = 100_000,
 ) -> ParsedPdf:
+    upload = await read_pdf_upload(request, max_bytes=max_bytes)
+    return await run_in_threadpool(
+        parser,
+        upload.pdf_bytes,
+        filename=upload.filename,
+        content_type=upload.content_type,
+        max_bytes=max_bytes,
+        max_pages=max_pages,
+        max_chars=max_chars,
+    )
+
+
+async def read_pdf_upload(
+    request: Request,
+    *,
+    max_bytes: int = 10 * 1024 * 1024,
+) -> BufferedPdfUpload:
+    """Read one bounded multipart upload without parsing its PDF contents."""
     request_body_limit = max_bytes + MULTIPART_ENVELOPE_BYTES
     content_length = request.headers.get("Content-Length")
     if content_length is not None:
@@ -151,14 +177,10 @@ async def parse_pdf_upload(
                     details={"max_bytes": max_bytes, "actual_bytes": len(pdf_bytes)},
                 )
 
-            return await run_in_threadpool(
-                parser,
-                pdf_bytes,
+            return BufferedPdfUpload(
+                pdf_bytes=pdf_bytes,
                 filename=upload.filename or "",
                 content_type=upload.content_type or "",
-                max_bytes=max_bytes,
-                max_pages=max_pages,
-                max_chars=max_chars,
             )
     except _RequestBodyTooLarge as exc:
         raise PdfTooLargeError(details={"max_bytes": max_bytes}) from exc

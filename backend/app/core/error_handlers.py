@@ -70,12 +70,14 @@ async def domain_error_handler(request: Request, exc: Exception) -> JSONResponse
 async def request_validation_error_handler(request: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, RequestValidationError):
         raise exc
-    del exc
+    invalid_snapshot = request.url.path == "/api/v1/matches" and any(
+        tuple(error.get("loc", ()))[:2] == ("body", "resume_snapshot") for error in exc.errors()
+    )
     return _error_response(
         request,
         status_code=422,
-        code="REQUEST_VALIDATION_ERROR",
-        message="请求参数无效。",
+        code="INVALID_RESUME_SNAPSHOT" if invalid_snapshot else "REQUEST_VALIDATION_ERROR",
+        message="简历快照无效。" if invalid_snapshot else "请求参数无效。",
     )
 
 

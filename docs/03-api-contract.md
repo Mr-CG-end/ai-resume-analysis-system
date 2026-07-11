@@ -6,6 +6,8 @@ API 基础路径为 `/api/v1`，请求和响应使用 UTF-8。除文件上传外
 
 每个请求通过响应头 `X-Request-ID` 返回追踪标识。客户端可以主动发送同名请求头；缺失时由服务端生成。日志与错误响应必须使用同一标识。
 
+浏览器跨源访问使用 `CORS_ORIGINS` 显式白名单。服务仅允许 `GET`、`POST`、`OPTIONS`，允许请求头 `Content-Type`、`X-Request-ID`，并向浏览器暴露响应头 `X-Request-ID`；不启用 credentials。成功、4xx、5xx 实际响应均携带匹配来源的 CORS 头，OPTIONS 预检由最外层 CORS 中间件响应。未列入白名单的来源不会获得 `Access-Control-Allow-Origin`。
+
 ## 公共类型
 
 ### `DocumentMetadata`

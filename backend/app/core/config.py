@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,9 +12,22 @@ class Settings(BaseSettings):
     ai_timeout_seconds: float = Field(default=20.0, gt=0, le=60, allow_inf_nan=False)
     redis_url: str | None = None
     cache_ttl_seconds: int = Field(default=86_400, ge=1)
+    cors_origins: str = "http://localhost:5173"
     max_pdf_bytes: int = 10_485_760
     max_pdf_pages: int = 30
     max_resume_chars: int = 100_000
+
+    @field_validator("cors_origins")
+    @classmethod
+    def validate_cors_origins(cls, value: str) -> str:
+        origins = tuple(origin.strip() for origin in value.split(","))
+        if not origins or any(not origin or origin == "*" for origin in origins):
+            raise ValueError("CORS_ORIGINS must contain explicit, non-empty origins")
+        return ",".join(origins)
+
+    @property
+    def allowed_cors_origins(self) -> tuple[str, ...]:
+        return tuple(self.cors_origins.split(","))
 
     @property
     def ai_configured(self) -> bool:

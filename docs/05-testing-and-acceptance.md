@@ -12,10 +12,12 @@
 | 后端集成测试 | 路由、状态码、Schema、异常映射、缓存旁路 | AI 与 Redis 使用可控替身 |
 | 前端组件测试 | 文件预检、状态切换、结果展示、错误恢复 | 模拟 API 响应 |
 | 契约测试 | JSON 字段和 TypeScript 类型与 API 契约一致 | 使用固定成功和失败样例 |
-| 端到端测试 | 上传、查看档案、提交 JD、查看评分 | 本地服务和线上环境各执行一次 |
+| 端到端测试 | 上传、查看档案、提交 JD、查看评分、CORS 与请求 ID | Playwright 启动本地 FastAPI/Vite 双服务，线上再执行一次冒烟 |
 | 部署冒烟测试 | 健康检查、CORS、公开地址、静态资源路径 | 真实 FC 与 GitHub Pages |
 
 AI 测试不得依赖线上模型的自然语言稳定性。集成测试使用固定 JSON 响应模拟正常、超时、非 JSON 和字段错误；线上只保留少量脱敏样例做人工冒烟验证。
+
+本地浏览器 smoke 使用 `backend/tests/fixtures/resume-valid-3-pages.pdf` 和规则降级，不配置真实 AI 密钥。运行 `cd frontend && pnpm test:e2e`；测试同时验证 API 来源、`X-Request-ID`、重置流程和 Console 无未处理异常。
 
 ## 测试资料
 

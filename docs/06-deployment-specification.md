@@ -47,7 +47,7 @@ Copy-Item .env.example .env
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-真实 AI 提取需要同时配置 `AI_API_KEY`、`AI_BASE_URL` 和 `AI_MODEL`；任一缺失时健康检查返回 503，但简历上传仍以规则档案降级返回。Redis 启用时增加 `REDIS_URL=redis://localhost:6379/0`。`CORS_ORIGINS=http://localhost:5173` 将在后续浏览器联调阶段实现。
+真实 AI 提取需要同时配置 `AI_API_KEY`、`AI_BASE_URL` 和 `AI_MODEL`；任一缺失时健康检查返回 503，但简历上传仍以规则档案降级返回。Redis 启用时增加 `REDIS_URL=redis://localhost:6379/0`。`CORS_ORIGINS` 使用逗号分隔的精确来源，默认仅 `http://localhost:5173`；空来源和通配符 `*` 会被拒绝，生产环境需加入 GitHub Pages 来源。
 
 ### 前端
 

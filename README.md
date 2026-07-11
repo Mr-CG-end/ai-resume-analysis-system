@@ -37,7 +37,7 @@ Copy-Item .env.example .env.local
 pnpm dev
 ```
 
-复制后的 `.env` 默认将 `AI_API_KEY`、`AI_BASE_URL` 和 `AI_MODEL` 留空，使用真实模型前需在本地填写这三项（不得提交）。后端仅在三项均为非空值时将 AI 健康状态报告为可用；单次模型调用默认超时 20 秒，可通过 `AI_TIMEOUT_SECONDS` 调整为大于 0 且不超过 60 秒。模型接口采用 OpenAI 兼容的 `/chat/completions` 协议，响应解压后最多接收 1 MiB。仅在启用缓存时配置 `REDIS_URL`；缓存 TTL 默认 86,400 秒，可通过 `CACHE_TTL_SECONDS` 调整。Redis 连接、读取、坏数据或写入失败都会旁路为缓存未命中，不阻断业务。CORS 白名单将在后续集成阶段实现。前端 `.env.local` 只配置公开的 `VITE_API_BASE_URL`，不得包含任何密钥。
+复制后的 `.env` 默认将 `AI_API_KEY`、`AI_BASE_URL` 和 `AI_MODEL` 留空，使用真实模型前需在本地填写这三项（不得提交）。后端仅在三项均为非空值时将 AI 健康状态报告为可用；单次模型调用默认超时 20 秒，可通过 `AI_TIMEOUT_SECONDS` 调整为大于 0 且不超过 60 秒。模型接口采用 OpenAI 兼容的 `/chat/completions` 协议，响应解压后最多接收 1 MiB。仅在启用缓存时配置 `REDIS_URL`；缓存 TTL 默认 86,400 秒，可通过 `CACHE_TTL_SECONDS` 调整。Redis 连接、读取、坏数据或写入失败都会旁路为缓存未命中，不阻断业务。`CORS_ORIGINS` 使用逗号分隔的精确来源，默认仅允许 `http://localhost:5173`，拒绝空值和 `*`。前端 `.env.local` 只配置公开的 `VITE_API_BASE_URL`，不得包含任何密钥。
 
 ## 验证
 
@@ -79,4 +79,4 @@ pnpm build
 
 生产 PDF 解析依赖 pypdf 6.14.2，测试 fixture 生成器使用开发依赖 ReportLab 5.0.0；二者均按 BSD-3-Clause 许可使用。ReportLab 不进入生产锁或后端镜像。归属与许可来源见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)、[pypdf LICENSE](https://github.com/py-pdf/pypdf/blob/6.14.2/LICENSE) 和 [ReportLab 官方许可说明](https://docs.reportlab.com/developerfaqs/#licensing)。
 
-这些文件提供可重复的构建和部署流程，不表示当前版本已经发布到线上。项目进度见 [`docs/00-project-checklist.md`](docs/00-project-checklist.md)，完整需求、架构、测试和部署约束见 [`docs/`](docs/)。项目完整功能完成后，最终由用户按 [`docs/07-local-manual-acceptance.md`](docs/07-local-manual-acceptance.md) 在本地执行人工验收并确认结果；当前骨架核验不能替代最终验收。
+这些文件提供可重复的构建和部署流程，不表示当前版本已经发布到线上。项目进度见 [`docs/00-project-checklist.md`](docs/00-project-checklist.md)，完整需求、架构、测试和部署约束见 [`docs/`](docs/)。项目完整功能完成后，最终由用户按 [`docs/07-local-manual-acceptance.md`](docs/07-local-manual-acceptance.md) 在本地执行人工验收并确认结果；阶段 7 自动化联调不能替代最终人工验收。

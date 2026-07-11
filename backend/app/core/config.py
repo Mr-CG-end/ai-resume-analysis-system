@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     ai_model: str | None = None
     ai_timeout_seconds: float = Field(default=20.0, gt=0, le=60, allow_inf_nan=False)
     redis_url: str | None = None
+    cache_ttl_seconds: int = Field(default=86_400, ge=1)
     max_pdf_bytes: int = 10_485_760
     max_pdf_pages: int = 30
     max_resume_chars: int = 100_000

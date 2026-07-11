@@ -1,5 +1,6 @@
 import logging
 import re
+from contextvars import ContextVar
 from uuid import uuid4
 
 from fastapi import Request, Response
@@ -9,6 +10,7 @@ from starlette.responses import JSONResponse
 
 SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 logger = logging.getLogger(__name__)
+current_request_id: ContextVar[str | None] = ContextVar("current_request_id", default=None)
 
 
 class RequestIdMiddleware(BaseHTTPMiddleware):
@@ -20,8 +22,12 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
             else str(uuid4())
         )
         request.state.request_id = request_id
+        token = current_request_id.set(request_id)
         try:
-            response = await call_next(request)
+            try:
+                response = await call_next(request)
+            finally:
+                current_request_id.reset(token)
         except ClientDisconnect:
             raise
         except Exception:

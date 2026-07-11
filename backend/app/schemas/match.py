@@ -40,6 +40,13 @@ class MatchEvidence(ContractModel):
     dimension: Literal["experience"]
     text: EvidenceText
 
+    @field_validator("text")
+    @classmethod
+    def evidence_must_contain_visible_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("evidence must contain visible text")
+        return value
+
 
 class MatchResponse(ContractModel):
     match_id: str = Field(pattern=r"^mat_[0-9a-f-]{36}$")
@@ -85,4 +92,8 @@ class MatchResponse(ContractModel):
             raise ValueError("rule_fallback requires degraded state and fallback warning")
         if self.method == "hybrid" and (self.degraded or fallback_warning):
             raise ValueError("hybrid requires non-degraded state without fallback warning")
+        if self.method == "hybrid" and not self.evidence:
+            raise ValueError("hybrid requires verified evidence")
+        if self.method == "rule_fallback" and self.evidence:
+            raise ValueError("rule_fallback must not contain AI evidence")
         return self

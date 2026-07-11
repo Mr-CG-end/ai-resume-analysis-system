@@ -173,3 +173,73 @@ async def test_corrupt_cache_payload_is_recomputed_and_overwritten() -> None:
     assert response.status_code == 201
     assert response.json()["cached"] is False
     assert profile.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_cached_resume_still_obeys_current_page_limit() -> None:
+    cache = MemoryCache()
+    profile = ProfileExtractor()
+    match = MatchAnalyzer()
+    application = _app(cache, profile, match)
+    transport = httpx.ASGITransport(app=application)
+    pdf = (FIXTURES / "resume-valid-3-pages.pdf").read_bytes()
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        first = await client.post(
+            "/api/v1/resumes",
+            files={"file": ("candidate.pdf", pdf, "application/pdf")},
+        )
+        application.dependency_overrides[get_settings] = lambda: Settings(
+            _env_file=None,
+            ai_api_key="test-key",
+            ai_base_url="https://ai.example.test/v1",
+            ai_model="test-model",
+            max_pdf_pages=1,
+        )
+        limited = await client.post(
+            "/api/v1/resumes",
+            files={"file": ("candidate.pdf", pdf, "application/pdf")},
+        )
+
+    assert first.status_code == 201
+    assert limited.status_code == 422
+    assert limited.json()["error"]["code"] == "PDF_PAGE_LIMIT_EXCEEDED"
+    assert profile.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_degraded_resume_and_match_results_are_cached() -> None:
+    cache = MemoryCache()
+    application = create_app()
+    application.dependency_overrides[get_settings] = lambda: Settings(_env_file=None)
+    application.dependency_overrides[get_cache_store] = lambda: cache
+    transport = httpx.ASGITransport(app=application)
+    pdf = (FIXTURES / "resume-valid-3-pages.pdf").read_bytes()
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        first_resume = await client.post(
+            "/api/v1/resumes",
+            files={"file": ("candidate.pdf", pdf, "application/pdf")},
+        )
+        second_resume = await client.post(
+            "/api/v1/resumes",
+            files={"file": ("candidate.pdf", pdf, "application/pdf")},
+        )
+        job = "招聘 Python 后端开发工程师，需要 Redis 与 Docker 项目经验。"
+        first_match = await client.post(
+            "/api/v1/matches",
+            json={"resume_snapshot": first_resume.json(), "job_description": job},
+        )
+        second_match = await client.post(
+            "/api/v1/matches",
+            json={"resume_snapshot": second_resume.json(), "job_description": job},
+        )
+
+    assert first_resume.json()["degraded"] is True
+    assert first_resume.json()["cached"] is False
+    assert second_resume.json()["degraded"] is True
+    assert second_resume.json()["cached"] is True
+    assert first_match.json()["method"] == "rule_fallback"
+    assert first_match.json()["cached"] is False
+    assert second_match.json()["method"] == "rule_fallback"
+    assert second_match.json()["cached"] is True

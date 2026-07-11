@@ -86,4 +86,7 @@ class ResumeSnapshot(ContractModel):
     def character_count_matches_cleaned_text(self) -> Self:
         if self.document.character_count != len(self.cleaned_text):
             raise ValueError("document character_count must match cleaned_text length")
+        fallback_warning = "ai_extraction_fallback" in self.warnings
+        if self.degraded != fallback_warning:
+            raise ValueError("degraded state must match the AI fallback warning")
         return self

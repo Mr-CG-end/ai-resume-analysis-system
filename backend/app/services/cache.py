@@ -6,10 +6,14 @@ from pydantic import BaseModel, ValidationError
 
 from app.schemas.match import MatchResponse
 from app.schemas.resume import ResumeSnapshot
+from app.services.ai_match import PROMPT_VERSION as MATCH_PROMPT_VERSION
+from app.services.ai_profile import PROMPT_VERSION as PROFILE_PROMPT_VERSION
 
 CACHE_TTL_SECONDS = 24 * 60 * 60
-DEFAULT_EXTRACT_VERSION = "v1"
-DEFAULT_SCORE_VERSION = "v1"
+PDF_PARSE_VERSION = "pdf-v1"
+MATCH_RULE_VERSION = "score-v1"
+DEFAULT_EXTRACT_VERSION = f"{PDF_PARSE_VERSION}-{PROFILE_PROMPT_VERSION}"
+DEFAULT_SCORE_VERSION = f"{MATCH_RULE_VERSION}-{MATCH_PROMPT_VERSION}"
 
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _VERSION_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,32}$")

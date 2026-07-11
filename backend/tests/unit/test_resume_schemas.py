@@ -198,6 +198,23 @@ def test_resume_snapshot_rejects_character_count_mismatch() -> None:
 
 
 @pytest.mark.parametrize(
+    ("degraded", "warnings"),
+    [
+        (True, []),
+        (False, ["ai_extraction_fallback"]),
+    ],
+)
+def test_resume_snapshot_rejects_inconsistent_fallback_state(
+    degraded: bool,
+    warnings: list[str],
+) -> None:
+    with pytest.raises(ValidationError, match="fallback warning"):
+        ResumeSnapshot.model_validate(
+            {**_snapshot_payload(), "degraded": degraded, "warnings": warnings}
+        )
+
+
+@pytest.mark.parametrize(
     "resume_id",
     [
         str(uuid4()),

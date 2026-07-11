@@ -18,7 +18,7 @@ from app.services.cache import (
     stable_hash,
 )
 from app.services.jd import JdValidationError, extract_jd_keywords
-from app.services.matching import analyze_match
+from app.services.matching import DeterministicMatch, analyze_match, score_deterministic_match
 from app.services.redis_cache import CacheStore
 
 router = APIRouter(tags=["matches"])
@@ -72,12 +72,12 @@ async def create_match(
         stable_hash(keywords.normalized_text),
     )
     cached_response = deserialize_match_response(await cache.get(cache_key) or "")
-    if (
-        cached_response is not None
-        and not cached_response.degraded
-        and all(
-            item.text in payload.resume_snapshot.cleaned_text for item in cached_response.evidence
-        )
+    deterministic = score_deterministic_match(keywords, payload.resume_snapshot.cleaned_text)
+    if cached_response is not None and _cached_match_is_valid(
+        cached_response,
+        keywords.skills,
+        deterministic,
+        payload.resume_snapshot.cleaned_text,
     ):
         cached_data = cached_response.model_dump(mode="json")
         cached_data["match_id"] = f"mat_{uuid4()}"
@@ -111,12 +111,11 @@ async def create_match(
         degraded=analysis.degraded,
         cached=False,
     )
-    if not response.degraded:
-        await cache.set(
-            cache_key,
-            serialize_cache_payload(response),
-            ttl_seconds=settings.cache_ttl_seconds,
-        )
+    await cache.set(
+        cache_key,
+        serialize_cache_payload(response),
+        ttl_seconds=settings.cache_ttl_seconds,
+    )
     _log_match_result(request, settings, started_at, response, analyzer)
     return response
 
@@ -141,4 +140,33 @@ def _log_match_result(
             "degraded": response.degraded,
             "cached": response.cached,
         },
+    )
+
+
+def _cached_match_is_valid(
+    response: MatchResponse,
+    skills: tuple[str, ...],
+    deterministic: DeterministicMatch,
+    cleaned_text: str,
+) -> bool:
+    if response.jd_keywords != list(skills):
+        return False
+    if response.matched_keywords != list(deterministic.matched_keywords):
+        return False
+    if response.missing_keywords != list(deterministic.missing_keywords):
+        return False
+    if response.scores.skill_match != deterministic.skill_score:
+        return False
+    if response.summary != _summary(
+        response.scores.skill_match,
+        response.scores.experience_relevance,
+    ):
+        return False
+    if response.method == "rule_fallback":
+        return (
+            not response.evidence
+            and response.scores.experience_relevance == deterministic.experience_score
+        )
+    return bool(response.evidence) and all(
+        item.text.strip() and item.text in cleaned_text for item in response.evidence
     )

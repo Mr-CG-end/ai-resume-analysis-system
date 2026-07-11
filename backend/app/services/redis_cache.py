@@ -5,6 +5,8 @@ from typing import Protocol, cast
 
 from redis.asyncio import Redis
 
+from app.core.request_id import current_request_id
+
 logger = logging.getLogger(__name__)
 
 CACHE_TIMEOUT_SECONDS = 0.5
@@ -128,4 +130,10 @@ def _log_cache_miss(operation: str, exc: Exception) -> None:
         "cache_unavailable operation=%s error_type=%s",
         operation,
         type(exc).__name__,
+        extra={
+            "event": "cache_unavailable",
+            "request_id": current_request_id.get(),
+            "operation": operation,
+            "error_type": type(exc).__name__,
+        },
     )

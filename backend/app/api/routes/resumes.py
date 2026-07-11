@@ -9,6 +9,7 @@ from starlette.concurrency import run_in_threadpool
 from app.api.dependencies import get_cache_store
 from app.api.upload import read_pdf_upload
 from app.core.config import Settings, get_settings
+from app.domain.errors import PdfPageLimitExceededError, PdfTextTooLongError
 from app.schemas.resume import DocumentMetadata, ResumeSnapshot
 from app.services.ai_profile import OpenAiProfileExtractor
 from app.services.cache import (
@@ -54,7 +55,21 @@ async def create_resume_snapshot(
     )
     cache_key = build_extract_cache_key(stable_bytes_hash(upload.pdf_bytes))
     cached_snapshot = deserialize_resume_snapshot(await cache.get(cache_key) or "")
-    if cached_snapshot is not None and not cached_snapshot.degraded:
+    if cached_snapshot is not None:
+        if cached_snapshot.document.page_count > settings.max_pdf_pages:
+            raise PdfPageLimitExceededError(
+                details={
+                    "max_pages": settings.max_pdf_pages,
+                    "actual_pages": cached_snapshot.document.page_count,
+                }
+            )
+        if cached_snapshot.document.character_count > settings.max_resume_chars:
+            raise PdfTextTooLongError(
+                details={
+                    "max_chars": settings.max_resume_chars,
+                    "actual_chars": cached_snapshot.document.character_count,
+                }
+            )
         cached_data = cached_snapshot.model_dump(mode="json")
         cached_data["resume_id"] = f"res_{uuid4()}"
         cached_data["cached"] = True
@@ -86,12 +101,11 @@ async def create_resume_snapshot(
         degraded=analysis.degraded,
         cached=False,
     )
-    if not snapshot.degraded:
-        await cache.set(
-            cache_key,
-            serialize_cache_payload(snapshot),
-            ttl_seconds=settings.cache_ttl_seconds,
-        )
+    await cache.set(
+        cache_key,
+        serialize_cache_payload(snapshot),
+        ttl_seconds=settings.cache_ttl_seconds,
+    )
     _log_resume_result(request, settings, started_at, snapshot, extractor)
     return snapshot
 

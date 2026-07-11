@@ -138,3 +138,26 @@ async def test_warning_does_not_leak_key_payload_or_exception_message(
     assert "cache_unavailable operation=read error_type=ConnectionError" in log_text
     assert "password" not in log_text
     assert "private-hash" not in log_text
+
+
+@pytest.mark.asyncio
+async def test_warning_record_contains_safe_structured_context(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from app.core.request_id import current_request_id
+
+    client = FakeRedis()
+    client.get_error = ConnectionError("private detail")
+    cache = RedisCache(client)
+    token = current_request_id.set("req-cache-test")
+    try:
+        with caplog.at_level(logging.WARNING):
+            assert await cache.get("private-key") is None
+    finally:
+        current_request_id.reset(token)
+
+    record = caplog.records[-1]
+    assert record.event == "cache_unavailable"
+    assert record.request_id == "req-cache-test"
+    assert record.operation == "read"
+    assert record.error_type == "ConnectionError"

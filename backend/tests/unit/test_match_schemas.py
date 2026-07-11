@@ -92,6 +92,25 @@ def test_stage_five_allows_valid_cached_response() -> None:
     assert MatchResponse.model_validate(_response(cached=True)).cached is True
 
 
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"evidence": []},
+        {"evidence": [{"dimension": "experience", "text": " \t"}]},
+        {
+            "method": "rule_fallback",
+            "degraded": True,
+            "warnings": ["ai_matching_fallback"],
+        },
+    ],
+)
+def test_response_rejects_missing_blank_or_fallback_ai_evidence(
+    changes: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        MatchResponse.model_validate(_response(**changes))
+
+
 def test_match_response_rejects_noncanonical_id_and_extra_fields() -> None:
     with pytest.raises(ValidationError):
         MatchResponse.model_validate(_response(match_id="mat_550E8400-E29B-41D4-A716-446655440001"))

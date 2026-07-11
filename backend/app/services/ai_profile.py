@@ -116,6 +116,7 @@ class OpenAiProfileExtractor:
         return {
             "model": self._settings.ai_model,
             "temperature": 0,
+            "enable_thinking": False,
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": system_prompt},

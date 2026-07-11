@@ -78,7 +78,9 @@ async def test_analyze_posts_untrusted_json_and_filters_exact_evidence() -> None
     assert str(request.url) == "https://ai.example/v1/chat/completions"
     assert request.headers["Accept-Encoding"] == "identity"
     body = json.loads(request.content)
-    assert body["temperature"] == 0 and body["response_format"] == {"type": "json_object"}
+    assert body["temperature"] == 0
+    assert body["enable_thinking"] is False
+    assert body["response_format"] == {"type": "json_object"}
     assert "match-v1" in body["messages"][0]["content"]
     assert json.dumps("招聘后端工程师", ensure_ascii=False) in body["messages"][1]["content"]
     assert json.dumps(resume, ensure_ascii=False) in body["messages"][1]["content"]

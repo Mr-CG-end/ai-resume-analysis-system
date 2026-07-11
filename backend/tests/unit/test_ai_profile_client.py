@@ -140,6 +140,7 @@ async def test_extract_posts_strict_prompt_and_validates_payload() -> None:
     body = json.loads(request.content)
     assert body["model"] == "profile-model"
     assert body["temperature"] == 0
+    assert body["enable_thinking"] is False
     assert body["response_format"] == {"type": "json_object"}
     assert "profile-v1" in body["messages"][0]["content"]
     assert "untrusted" in body["messages"][0]["content"].lower()

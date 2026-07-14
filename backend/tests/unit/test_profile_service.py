@@ -217,6 +217,35 @@ async def test_education_and_project_fields_are_filtered_independently() -> None
     assert result.profile.projects[0].technologies == ["fastapi"]
 
 
+@pytest.mark.asyncio
+async def test_project_text_accepts_line_wrap_whitespace_without_accepting_invention() -> None:
+    cleaned_text = (
+        "示例项目 2025.4 - 2025.7\n项目描述: 面向用户的社区平\n台\n负责需求拆分与模块开发"
+    )
+    extracted = payload(
+        projects=[
+            AiProject(
+                name=evidence("示例项目", "示例项目"),
+                date_range=evidence("2025.4 - 2025.7", "2025.4 - 2025.7"),
+                role=evidence(),
+                description=evidence("面向用户的社区平台", "面向用户的社区平台"),
+                highlights=[
+                    EvidenceText(value="负责需求拆分与模块开发", evidence="负责需求拆分与模块开发"),
+                    EvidenceText(value="虚构成果", evidence="虚构成果"),
+                ],
+                technologies=[],
+            )
+        ]
+    )
+
+    result = await analyze_profile(cleaned_text, StubExtractor(extracted))
+
+    project = result.profile.projects[0]
+    assert project.date_range == "2025.4 - 2025.7"
+    assert project.description == "面向用户的社区平台"
+    assert project.highlights == ["负责需求拆分与模块开发"]
+
+
 def period(
     start: str,
     end: str,

@@ -47,8 +47,10 @@ class Education(ContractModel):
 
 class Project(ContractModel):
     name: str | None = None
+    date_range: str | None = None
     role: str | None = None
     description: str | None = None
+    highlights: list[str] = Field(default_factory=list)
     technologies: list[str] = Field(default_factory=list)
 
 

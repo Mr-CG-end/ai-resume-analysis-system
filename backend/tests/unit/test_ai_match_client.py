@@ -80,8 +80,9 @@ async def test_analyze_posts_untrusted_json_and_filters_exact_evidence() -> None
     body = json.loads(request.content)
     assert body["temperature"] == 0
     assert body["enable_thinking"] is False
+    assert body["max_tokens"] == 1024
     assert body["response_format"] == {"type": "json_object"}
-    assert "match-v1" in body["messages"][0]["content"]
+    assert "match-v2" in body["messages"][0]["content"]
     assert json.dumps("招聘后端工程师", ensure_ascii=False) in body["messages"][1]["content"]
     assert json.dumps(resume, ensure_ascii=False) in body["messages"][1]["content"]
 
@@ -100,6 +101,26 @@ async def test_no_exact_evidence_retries_then_fails() -> None:
             "岗位", "真实简历"
         )
     assert attempts == 2
+
+
+@pytest.mark.asyncio
+async def test_line_wrap_normalized_evidence_is_restored_to_exact_resume_substring() -> None:
+    resume = "项目描述: 负责前端模块开\n发与性能优化"
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return _completion(
+            {
+                "experience_relevance": 88,
+                "evidence": ["负责前端模块开发与性能优化"],
+            }
+        )
+
+    result = await OpenAiMatchAnalyzer(_settings(), transport=httpx.MockTransport(handler)).analyze(
+        "招聘前端开发工程师", resume
+    )
+
+    assert result.evidence == ["负责前端模块开\n发与性能优化"]
+    assert result.evidence[0] in resume
 
 
 @pytest.mark.asyncio

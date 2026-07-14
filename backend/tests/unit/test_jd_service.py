@@ -40,6 +40,14 @@ def test_ascii_aliases_require_alphanumeric_boundaries() -> None:
     assert "Java" not in parsed.skills
 
 
+def test_extracts_common_frontend_tooling_and_vue3_alias() -> None:
+    parsed = extract_jd_keywords(
+        "招聘前端开发工程师，要求熟悉 Vue3、Vite、ECharts 和 Axios，并负责前端开发。"
+    )
+    assert parsed.skills == ("Vue.js", "Vite", "ECharts", "Axios")
+    assert parsed.responsibilities == ("Frontend Development",)
+
+
 def test_nfkc_is_applied_and_internal_whitespace_is_preserved() -> None:
     parsed = extract_jd_keywords("需要 Ｐｙｔｈｏｎ 工程师\n负责系统设计与团队协作。")
     assert parsed.normalized_text == "需要 Python 工程师\n负责系统设计与团队协作。"

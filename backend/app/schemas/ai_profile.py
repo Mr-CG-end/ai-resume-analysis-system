@@ -45,8 +45,10 @@ class AiEducation(AiSchemaModel):
 
 class AiProject(AiSchemaModel):
     name: EvidenceValue
+    date_range: EvidenceValue = Field(default_factory=EvidenceValue)
     role: EvidenceValue
     description: EvidenceValue
+    highlights: list[EvidenceText] = Field(default_factory=list, max_length=100)
     technologies: list[EvidenceText] = Field(max_length=100)
 
 
@@ -78,8 +80,10 @@ class CompactAiEducation(AiSchemaModel):
 
 class CompactAiProject(AiSchemaModel):
     name: NonEmptyText | None = None
+    date_range: NonEmptyText | None = None
     role: NonEmptyText | None = None
     description: NonEmptyText | None = None
+    highlights: list[NonEmptyText] = Field(default_factory=list, max_length=100)
     technologies: list[NonEmptyText] = Field(default_factory=list, max_length=100)
 
 

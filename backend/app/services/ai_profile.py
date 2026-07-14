@@ -21,7 +21,7 @@ from app.schemas.ai_profile import (
 )
 from app.services.profile import AiExtractionError
 
-PROMPT_VERSION: Final = "profile-v3"
+PROMPT_VERSION: Final = "profile-v4"
 MAX_AI_RESPONSE_BYTES: Final = 1_048_576
 _RETRYABLE_STATUS_CODES: Final = frozenset({408, 429, 500, 502, 503, 504})
 _SAFE_ERROR_MESSAGE: Final = "AI profile extraction failed"
@@ -123,7 +123,13 @@ class OpenAiProfileExtractor:
             "when a fact is absent. For employment_periods, include an "
             "item only when both dates appear as exact YYYY-MM substrings and the interval "
             "evidence is one exact contiguous substring. Omit year-only or otherwise uncertain "
-            "periods; never invent month values. Do not infer or invent facts."
+            "periods; never invent month values. For every clearly labeled project, extract its "
+            "name, original date range, explicitly stated role, the text after a project "
+            "description label, responsibility or achievement lines as highlights, and explicit "
+            "technologies. Preserve project date ranges exactly as written instead of converting "
+            "them. A resume title such as Frontend Engineer or 前端开发工程师 is a job intention "
+            "when it appears near the candidate name. Do not omit a project description merely "
+            "because it wraps across lines. Do not infer or invent facts."
         )
         untrusted_input = json.dumps({"resume_text": cleaned_text}, ensure_ascii=False)
         user_prompt = (
@@ -215,8 +221,12 @@ class OpenAiProfileExtractor:
             projects=[
                 AiProject(
                     name=evidence(item.name),
+                    date_range=evidence(item.date_range),
                     role=evidence(item.role),
                     description=evidence(item.description),
+                    highlights=[
+                        EvidenceText(value=value, evidence=value) for value in item.highlights
+                    ],
                     technologies=[
                         EvidenceText(value=value, evidence=value) for value in item.technologies
                     ],

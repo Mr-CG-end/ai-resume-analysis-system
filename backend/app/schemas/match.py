@@ -54,6 +54,9 @@ class MatchResponse(ContractModel):
     jd_keywords: list[Keyword] = Field(max_length=50)
     matched_keywords: list[Keyword] = Field(max_length=50)
     missing_keywords: list[Keyword] = Field(max_length=50)
+    responsibility_keywords: list[Keyword] = Field(default_factory=list, max_length=50)
+    matched_responsibilities: list[Keyword] = Field(default_factory=list, max_length=50)
+    missing_responsibilities: list[Keyword] = Field(default_factory=list, max_length=50)
     scores: ScoreBreakdown
     evidence: list[MatchEvidence] = Field(max_length=5)
     summary: Summary
@@ -87,6 +90,18 @@ class MatchResponse(ContractModel):
             raise ValueError("keywords must be unique")
         if set(matched) & set(missing) or set(matched) | set(missing) != set(jd):
             raise ValueError("matched and missing keywords must partition jd keywords")
+        responsibilities = self.responsibility_keywords
+        matched_responsibilities = self.matched_responsibilities
+        missing_responsibilities = self.missing_responsibilities
+        if any(
+            len(items) != len(set(items))
+            for items in (responsibilities, matched_responsibilities, missing_responsibilities)
+        ):
+            raise ValueError("responsibility keywords must be unique")
+        if set(matched_responsibilities) & set(missing_responsibilities) or set(
+            matched_responsibilities
+        ) | set(missing_responsibilities) != set(responsibilities):
+            raise ValueError("matched and missing responsibilities must partition responsibilities")
         fallback_warning = "ai_matching_fallback" in self.warnings
         if self.method == "rule_fallback" and (not self.degraded or not fallback_warning):
             raise ValueError("rule_fallback requires degraded state and fallback warning")

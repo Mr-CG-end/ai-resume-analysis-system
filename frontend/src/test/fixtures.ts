@@ -28,8 +28,10 @@ export const resumeSnapshotFixture: ResumeSnapshot = {
     projects: [
       {
         name: '智能简历分析系统',
+        date_range: '2024.06 - 2024.09',
         role: '后端开发',
         description: '负责简历解析与匹配服务',
+        highlights: ['完成结构化信息提取与岗位匹配'],
         technologies: ['Python', 'FastAPI', 'Redis'],
       },
     ],
@@ -45,6 +47,9 @@ export const matchResponseFixture: MatchResponse = {
   jd_keywords: ['Python', 'RESTful API', 'Redis', 'Serverless'],
   matched_keywords: ['Python', 'Redis'],
   missing_keywords: ['RESTful API', 'Serverless'],
+  responsibility_keywords: ['后端开发', '接口开发'],
+  matched_responsibilities: ['后端开发'],
+  missing_responsibilities: ['接口开发'],
   scores: {
     skill_match: 50,
     experience_relevance: 80,

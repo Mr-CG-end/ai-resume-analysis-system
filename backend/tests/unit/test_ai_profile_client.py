@@ -144,7 +144,8 @@ async def test_extract_posts_strict_prompt_and_validates_payload() -> None:
     assert body["enable_thinking"] is False
     assert body["max_tokens"] == 4096
     assert body["response_format"] == {"type": "json_object"}
-    assert "profile-v3" in body["messages"][0]["content"]
+    assert "profile-v4" in body["messages"][0]["content"]
+    assert "project description" in body["messages"][0]["content"]
     assert "year-only" in body["messages"][0]["content"]
     assert "untrusted" in body["messages"][0]["content"].lower()
     assert (
@@ -177,6 +178,39 @@ async def test_extract_drops_year_only_employment_period_without_losing_profile(
 
     assert result.name.value == "张三"
     assert result.employment_periods == []
+
+
+@pytest.mark.asyncio
+async def test_extract_expands_project_date_description_and_highlights() -> None:
+    project_payload = {
+        **VALID_PAYLOAD,
+        "job_intention": "前端开发工程师",
+        "projects": [
+            {
+                "name": "示例项目",
+                "date_range": "2025.4 - 2025.7",
+                "role": "前端项目负责人",
+                "description": "面向用户的社区平台",
+                "highlights": ["负责需求拆分与模块开发", "实现移动端适配"],
+                "technologies": ["Vue3", "TypeScript"],
+            }
+        ],
+    }
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return _completion(project_payload)
+
+    result = await OpenAiProfileExtractor(
+        _settings(), transport=httpx.MockTransport(handler)
+    ).extract("前端开发工程师 示例项目 2025.4 - 2025.7")
+
+    assert result.job_intention.value == "前端开发工程师"
+    assert result.projects[0].date_range.value == "2025.4 - 2025.7"
+    assert result.projects[0].description.value == "面向用户的社区平台"
+    assert [item.value for item in result.projects[0].highlights] == [
+        "负责需求拆分与模块开发",
+        "实现移动端适配",
+    ]
 
 
 @pytest.mark.asyncio

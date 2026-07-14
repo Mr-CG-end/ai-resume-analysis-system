@@ -65,6 +65,19 @@
   color: #64716d;
 }
 
+.projectRole {
+  font-size: 0.875rem;
+}
+
+.highlights {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  color: #36535e;
+  line-height: 1.65;
+}
+
 .tags {
   display: flex;
   flex-wrap: wrap;

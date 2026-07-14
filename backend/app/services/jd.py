@@ -13,7 +13,10 @@ SKILL_ALIASES: dict[str, tuple[str, ...]] = {
     "JavaScript": ("javascript", "js"),
     "TypeScript": ("typescript", "ts"),
     "React": ("react",),
-    "Vue.js": ("vue.js", "vuejs", "vue"),
+    "Vue.js": ("vue.js", "vuejs", "vue3", "vue"),
+    "Vite": ("vite",),
+    "ECharts": ("echarts",),
+    "Axios": ("axios",),
     "FastAPI": ("fastapi",),
     "Django": ("django",),
     "Flask": ("flask",),
@@ -46,6 +49,19 @@ RESPONSIBILITY_ALIASES: dict[str, tuple[str, ...]] = {
     "Performance Optimization": ("performance optimization", "性能优化"),
     "Team Collaboration": ("team collaboration", "团队协作"),
     "Project Management": ("project management", "项目管理"),
+}
+
+RESPONSIBILITY_LABELS: dict[str, str] = {
+    "Backend Development": "后端开发",
+    "Frontend Development": "前端开发",
+    "API Development": "接口开发",
+    "System Design": "系统设计",
+    "Data Analysis": "数据分析",
+    "Automated Testing": "自动化测试",
+    "Deployment": "部署上线",
+    "Performance Optimization": "性能优化",
+    "Team Collaboration": "团队协作",
+    "Project Management": "项目管理",
 }
 
 

@@ -62,8 +62,10 @@ def test_nested_models_keep_stable_fields_and_arrays() -> None:
     }
     assert Project().model_dump() == {
         "name": None,
+        "date_range": None,
         "role": None,
         "description": None,
+        "highlights": [],
         "technologies": [],
     }
 

@@ -62,6 +62,18 @@ def _has_exact_evidence(cleaned_text: str, evidence: str) -> bool:
     return evidence in cleaned_text
 
 
+def _compact_normalized(value: str) -> str:
+    return "".join(unicodedata.normalize("NFKC", value).split()).casefold()
+
+
+def _has_text_evidence(cleaned_text: str, evidence: str) -> bool:
+    """Accept provider whitespace normalization while retaining source-backed values."""
+    if _has_exact_evidence(cleaned_text, evidence):
+        return True
+    normalized_evidence = _compact_normalized(evidence)
+    return bool(normalized_evidence) and normalized_evidence in _compact_normalized(cleaned_text)
+
+
 def _validated_value(
     item: EvidenceValue,
     cleaned_text: str,
@@ -71,7 +83,12 @@ def _validated_value(
 ) -> str | None:
     if item.value is None or item.evidence is None:
         return None
-    if not _has_exact_evidence(cleaned_text, item.evidence):
+    evidence_is_present = (
+        _has_exact_evidence(cleaned_text, item.evidence)
+        if kind in {"phone", "email", "exact"}
+        else _has_text_evidence(cleaned_text, item.evidence)
+    )
+    if not evidence_is_present:
         return None
 
     if kind == "phone":
@@ -129,19 +146,29 @@ def _validated_project(item: AiProject, cleaned_text: str) -> Project | None:
     technologies = [
         technology.value
         for technology in item.technologies
-        if _has_exact_evidence(cleaned_text, technology.evidence)
+        if _has_text_evidence(cleaned_text, technology.evidence)
         and _normalized(technology.value) in _normalized(technology.evidence)
+    ]
+    highlights = [
+        highlight.value
+        for highlight in item.highlights
+        if _has_text_evidence(cleaned_text, highlight.evidence)
+        and _normalized(highlight.value) in _normalized(highlight.evidence)
     ]
     project = Project(
         name=_validated_value(item.name, cleaned_text),
+        date_range=_validated_value(item.date_range, cleaned_text),
         role=_validated_value(item.role, cleaned_text),
         description=_validated_value(item.description, cleaned_text),
+        highlights=list(dict.fromkeys(highlights)),
         technologies=technologies,
     )
     if (
         project.name is None
+        and project.date_range is None
         and project.role is None
         and project.description is None
+        and not project.highlights
         and not project.technologies
     ):
         return None

@@ -18,6 +18,8 @@ from app.services.jd import (
 class DeterministicMatch:
     matched_keywords: tuple[str, ...]
     missing_keywords: tuple[str, ...]
+    matched_responsibilities: tuple[str, ...]
+    missing_responsibilities: tuple[str, ...]
     skill_score: int
     experience_score: int
     overall_score: int
@@ -61,17 +63,26 @@ def score_deterministic_match(
     resume_responsibilities = set(extract_catalog_keywords(cleaned_text, RESPONSIBILITY_ALIASES))
     matched_keywords = tuple(skill for skill in keywords.skills if skill in resume_skills)
     missing_keywords = tuple(skill for skill in keywords.skills if skill not in resume_skills)
-    matched_responsibilities = sum(
-        responsibility in resume_responsibilities for responsibility in keywords.responsibilities
+    matched_responsibilities = tuple(
+        responsibility
+        for responsibility in keywords.responsibilities
+        if responsibility in resume_responsibilities
+    )
+    missing_responsibilities = tuple(
+        responsibility
+        for responsibility in keywords.responsibilities
+        if responsibility not in resume_responsibilities
     )
     skill_score = calculate_coverage_score(len(matched_keywords), len(keywords.skills))
     experience_score = calculate_coverage_score(
-        matched_responsibilities,
+        len(matched_responsibilities),
         len(keywords.responsibilities),
     )
     return DeterministicMatch(
         matched_keywords=matched_keywords,
         missing_keywords=missing_keywords,
+        matched_responsibilities=matched_responsibilities,
+        missing_responsibilities=missing_responsibilities,
         skill_score=skill_score,
         experience_score=experience_score,
         overall_score=calculate_overall_score(skill_score, experience_score),
@@ -82,6 +93,8 @@ def _fallback_analysis(deterministic: DeterministicMatch) -> MatchAnalysis:
     return MatchAnalysis(
         matched_keywords=deterministic.matched_keywords,
         missing_keywords=deterministic.missing_keywords,
+        matched_responsibilities=deterministic.matched_responsibilities,
+        missing_responsibilities=deterministic.missing_responsibilities,
         skill_score=deterministic.skill_score,
         experience_score=deterministic.experience_score,
         overall_score=deterministic.overall_score,
@@ -117,6 +130,8 @@ async def analyze_match(
     return MatchAnalysis(
         matched_keywords=deterministic.matched_keywords,
         missing_keywords=deterministic.missing_keywords,
+        matched_responsibilities=deterministic.matched_responsibilities,
+        missing_responsibilities=deterministic.missing_responsibilities,
         skill_score=deterministic.skill_score,
         experience_score=experience_score,
         overall_score=calculate_overall_score(deterministic.skill_score, experience_score),

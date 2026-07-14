@@ -12,14 +12,16 @@ describe('MatchResultPanel', () => {
     expect(screen.getByLabelText('综合匹配分数 62 分')).toBeInTheDocument()
     expect(screen.getByText('50')).toBeInTheDocument()
     expect(screen.getByText('80')).toBeInTheDocument()
-    expect(screen.getByText('技能匹配（60% 权重）')).toBeInTheDocument()
-    expect(screen.getByText('经历相关（40% 权重）')).toBeInTheDocument()
+    expect(screen.getByText('技能匹配率（60% 权重）')).toBeInTheDocument()
+    expect(screen.getByText('经历相关性（40% 权重）')).toBeInTheDocument()
     expect(screen.getByText(matchResponseFixture.summary)).toBeInTheDocument()
     expect(screen.getByText('已匹配：Python')).toBeInTheDocument()
     expect(screen.getByText('待补充：Serverless')).toBeInTheDocument()
     expect(screen.getByRole('listitem')).toHaveTextContent('负责简历解析与匹配服务')
-    expect(screen.getByText('综合分析')).toBeInTheDocument()
-    expect(screen.queryByText('AI 经历分析暂不可用')).not.toBeInTheDocument()
+    expect(screen.getByText('已覆盖职责')).toBeInTheDocument()
+    expect(screen.getByText('已匹配：后端开发')).toBeInTheDocument()
+    expect(screen.getByText('AI + 规则综合评分')).toBeInTheDocument()
+    expect(screen.queryByText('AI 经历精评未完成')).not.toBeInTheDocument()
   })
 
   it('仅在缓存命中时显示轻量标识', () => {
@@ -51,12 +53,12 @@ describe('MatchResultPanel', () => {
       />,
     )
 
-    expect(screen.getByText('规则评分')).toBeInTheDocument()
-    expect(screen.getByText('AI 经历分析暂不可用')).toBeInTheDocument()
+    expect(screen.getByText('规则回退评分')).toBeInTheDocument()
+    expect(screen.getByText('AI 经历精评未完成')).toBeInTheDocument()
     expect(
-      screen.getByText('规则降级结果不包含 AI 经历证据。'),
+      screen.getByText('本次 AI 证据未通过原文验证，未展示可能失真的内容。'),
     ).toBeInTheDocument()
-    const evidenceSection = screen.getByRole('heading', { name: '简历原文证据' }).parentElement!
+    const evidenceSection = screen.getByRole('heading', { name: 'AI 经历相关性原文证据' }).parentElement!
     expect(within(evidenceSection).queryByRole('list')).not.toBeInTheDocument()
   })
 
@@ -67,7 +69,7 @@ describe('MatchResultPanel', () => {
         onReset={vi.fn()}
       />,
     )
-    expect(screen.getAllByText('暂无')).toHaveLength(2)
+    expect(screen.getAllByText('未提取到')).toHaveLength(2)
   })
 
   it('触发重新分析', () => {

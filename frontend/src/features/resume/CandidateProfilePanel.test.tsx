@@ -54,10 +54,10 @@ describe('CandidateProfilePanel', () => {
       />,
     )
 
-    expect(screen.getAllByText('未识别').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('未提取到').length).toBeGreaterThanOrEqual(2)
     expect(screen.getByText('0 年')).toBeInTheDocument()
-    expect(screen.getByText('未识别教育经历')).toBeInTheDocument()
-    expect(screen.getByText('未识别项目经历')).toBeInTheDocument()
+    expect(screen.getByText('未提取到教育经历')).toBeInTheDocument()
+    expect(screen.getByText('未提取到项目经历')).toBeInTheDocument()
   })
 
   it('renders present dates and an empty technology state', () => {
@@ -78,8 +78,10 @@ describe('CandidateProfilePanel', () => {
             projects: [
               {
                 name: null,
+                date_range: null,
                 role: null,
                 description: null,
+                highlights: [],
                 technologies: [],
               },
             ],
@@ -88,8 +90,8 @@ describe('CandidateProfilePanel', () => {
       />,
     )
 
-    expect(screen.getByText(/未识别 — 至今/)).toBeInTheDocument()
-    expect(screen.getByText('未识别技术栈')).toBeInTheDocument()
+    expect(screen.getByText(/时间未注明 — 至今/)).toBeInTheDocument()
+    expect(screen.getByText('未提取到技术栈')).toBeInTheDocument()
   })
 
   it('shows degradation and cache state independently', () => {

@@ -6,14 +6,16 @@ export interface CandidateProfilePanelProps {
   snapshot: ResumeSnapshot
 }
 
-function display(value: string | null): string {
-  return value?.trim() || '未识别'
+function display(value: string | null, emptyText = '未提取到'): string {
+  return value?.trim() || emptyText
 }
 
 function educationDateRange(education: Education): string {
-  const start = display(education.start_date)
+  const start = display(education.start_date, '时间未注明')
   const end =
-    education.end_date === 'present' ? '至今' : display(education.end_date)
+    education.end_date === 'present'
+      ? '至今'
+      : display(education.end_date, '时间未注明')
   return `${start} — ${end}`
 }
 
@@ -35,17 +37,25 @@ function ProjectItem({ project }: { project: Project }) {
   return (
     <li className={styles.listItem}>
       <div className={styles.itemHeading}>
-        <strong>{display(project.name)}</strong>
-        <span>{display(project.role)}</span>
+        <strong>{display(project.name, '项目名称未提取到')}</strong>
+        <span>{display(project.date_range, '时间未注明')}</span>
       </div>
-      <p>{display(project.description)}</p>
+      <p className={styles.projectRole}>项目角色：{display(project.role, '未注明')}</p>
+      <p>{display(project.description, '未提取到项目描述')}</p>
+      {project.highlights.length > 0 && (
+        <ul className={styles.highlights} aria-label="项目职责与亮点">
+          {project.highlights.map((highlight, index) => (
+            <li key={`${highlight}-${index}`}>{highlight}</li>
+          ))}
+        </ul>
+      )}
       <div className={styles.tags} aria-label="项目技术栈">
         {project.technologies.length > 0 ? (
           project.technologies.map((technology) => (
             <Tag key={technology}>{technology}</Tag>
           ))
         ) : (
-          <span>未识别技术栈</span>
+          <span>未提取到技术栈</span>
         )}
       </div>
     </li>
@@ -88,7 +98,7 @@ export function CandidateProfilePanel({
         </Descriptions.Item>
         <Descriptions.Item label="工作年限">
           {profile.years_of_experience === null
-            ? '未识别'
+            ? '未提取到'
             : `${profile.years_of_experience} 年`}
         </Descriptions.Item>
         <Descriptions.Item label="文件名">{document.filename}</Descriptions.Item>
@@ -107,7 +117,7 @@ export function CandidateProfilePanel({
             ))}
           </ul>
         ) : (
-          <p className={styles.empty}>未识别教育经历</p>
+          <p className={styles.empty}>未提取到教育经历</p>
         )}
       </section>
 
@@ -120,7 +130,7 @@ export function CandidateProfilePanel({
             ))}
           </ul>
         ) : (
-          <p className={styles.empty}>未识别项目经历</p>
+          <p className={styles.empty}>未提取到项目经历</p>
         )}
       </section>
     </section>

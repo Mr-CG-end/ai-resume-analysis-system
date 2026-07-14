@@ -24,8 +24,10 @@ export interface Education {
 
 export interface Project {
   name: string | null
+  date_range: string | null
   role: string | null
   description: string | null
+  highlights: string[]
   technologies: string[]
 }
 
@@ -76,6 +78,9 @@ export interface MatchResponse {
   jd_keywords: string[]
   matched_keywords: string[]
   missing_keywords: string[]
+  responsibility_keywords: string[]
+  matched_responsibilities: string[]
+  missing_responsibilities: string[]
   scores: ScoreBreakdown
   evidence: MatchEvidence[]
   summary: string

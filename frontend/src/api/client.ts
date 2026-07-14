@@ -57,8 +57,10 @@ function isProject(value: unknown): value is Project {
   return (
     isRecord(value) &&
     isNullableString(value.name) &&
+    isNullableString(value.date_range) &&
     isNullableString(value.role) &&
     isNullableString(value.description) &&
+    isStringArray(value.highlights) &&
     isStringArray(value.technologies)
   )
 }
@@ -138,6 +140,9 @@ function isMatchResponse(value: unknown): value is MatchResponse {
     isStringArray(value.jd_keywords) &&
     isStringArray(value.matched_keywords) &&
     isStringArray(value.missing_keywords) &&
+    isStringArray(value.responsibility_keywords) &&
+    isStringArray(value.matched_responsibilities) &&
+    isStringArray(value.missing_responsibilities) &&
     isScoreBreakdown(value.scores) &&
     Array.isArray(value.evidence) &&
     value.evidence.every(isMatchEvidence) &&

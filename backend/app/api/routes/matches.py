@@ -17,7 +17,7 @@ from app.services.cache import (
     serialize_cache_payload,
     stable_hash,
 )
-from app.services.jd import JdValidationError, extract_jd_keywords
+from app.services.jd import RESPONSIBILITY_LABELS, JdValidationError, extract_jd_keywords
 from app.services.matching import DeterministicMatch, analyze_match, score_deterministic_match
 from app.services.redis_cache import CacheStore
 
@@ -39,14 +39,26 @@ def get_match_analyzer(
     return OpenAiMatchAnalyzer(settings)
 
 
-def _summary(skill_score: int, experience_score: int) -> str:
-    if skill_score >= 75 and experience_score >= 75:
-        return "技能覆盖和经历相关性均较高。"
-    if skill_score >= 75:
-        return "技能覆盖较高，经历相关性仍有提升空间。"
-    if experience_score >= 75:
-        return "经历相关性较高，仍有部分岗位技能缺失。"
-    return "技能覆盖和经历相关性均有限，建议进一步核实。"
+def _responsibility_labels(values: tuple[str, ...]) -> list[str]:
+    return [RESPONSIBILITY_LABELS.get(value, value) for value in values]
+
+
+def _summary(
+    *,
+    matched_skill_count: int,
+    skill_count: int,
+    matched_responsibility_count: int,
+    responsibility_count: int,
+    method: str,
+    evidence_count: int,
+) -> str:
+    skill_detail = f"技能关键词匹配 {matched_skill_count}/{skill_count} 项"
+    if method == "hybrid":
+        return f"{skill_detail}；AI 结合 {evidence_count} 条简历原文证据评估经历相关性。"
+    return (
+        f"{skill_detail}；AI 精评未完成，经历分暂按职责关键词覆盖率 "
+        f"{matched_responsibility_count}/{responsibility_count} 计算。"
+    )
 
 
 @router.post(
@@ -76,6 +88,7 @@ async def create_match(
     if cached_response is not None and _cached_match_is_valid(
         cached_response,
         keywords.skills,
+        keywords.responsibilities,
         deterministic,
         payload.resume_snapshot.cleaned_text,
     ):
@@ -99,13 +112,23 @@ async def create_match(
         jd_keywords=list(keywords.skills),
         matched_keywords=list(analysis.matched_keywords),
         missing_keywords=list(analysis.missing_keywords),
+        responsibility_keywords=_responsibility_labels(keywords.responsibilities),
+        matched_responsibilities=_responsibility_labels(analysis.matched_responsibilities),
+        missing_responsibilities=_responsibility_labels(analysis.missing_responsibilities),
         scores=ScoreBreakdown(
             skill_match=analysis.skill_score,
             experience_relevance=analysis.experience_score,
             overall=analysis.overall_score,
         ),
         evidence=[MatchEvidence(dimension="experience", text=text) for text in analysis.evidence],
-        summary=_summary(analysis.skill_score, analysis.experience_score),
+        summary=_summary(
+            matched_skill_count=len(analysis.matched_keywords),
+            skill_count=len(keywords.skills),
+            matched_responsibility_count=len(analysis.matched_responsibilities),
+            responsibility_count=len(keywords.responsibilities),
+            method=analysis.method,
+            evidence_count=len(analysis.evidence),
+        ),
         method=analysis.method,
         warnings=list(analysis.warnings),
         degraded=analysis.degraded,
@@ -146,6 +169,7 @@ def _log_match_result(
 def _cached_match_is_valid(
     response: MatchResponse,
     skills: tuple[str, ...],
+    responsibilities: tuple[str, ...],
     deterministic: DeterministicMatch,
     cleaned_text: str,
 ) -> bool:
@@ -155,11 +179,25 @@ def _cached_match_is_valid(
         return False
     if response.missing_keywords != list(deterministic.missing_keywords):
         return False
+    if response.responsibility_keywords != _responsibility_labels(responsibilities):
+        return False
+    if response.matched_responsibilities != _responsibility_labels(
+        deterministic.matched_responsibilities
+    ):
+        return False
+    if response.missing_responsibilities != _responsibility_labels(
+        deterministic.missing_responsibilities
+    ):
+        return False
     if response.scores.skill_match != deterministic.skill_score:
         return False
     if response.summary != _summary(
-        response.scores.skill_match,
-        response.scores.experience_relevance,
+        matched_skill_count=len(response.matched_keywords),
+        skill_count=len(response.jd_keywords),
+        matched_responsibility_count=len(response.matched_responsibilities),
+        responsibility_count=len(response.responsibility_keywords),
+        method=response.method,
+        evidence_count=len(response.evidence),
     ):
         return False
     if response.method == "rule_fallback":

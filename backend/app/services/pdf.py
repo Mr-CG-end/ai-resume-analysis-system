@@ -183,7 +183,11 @@ def _extract_pages(reader: PdfReader, *, max_pages: int) -> tuple[list[str], int
             if content_bytes > MAX_PDF_CONTENT_BYTES:
                 raise _processing_limit_error()
 
-        page_text = page.extract_text()
+        page_text = page.extract_text(
+            extraction_mode="layout",
+            layout_mode_space_vertically=False,
+            layout_mode_strip_rotated=False,
+        )
         raw_character_count += len(page_text)
         if raw_character_count > MAX_RAW_TEXT_CHARS:
             raise PdfProcessingLimitExceededError(

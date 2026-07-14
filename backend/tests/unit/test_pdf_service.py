@@ -63,19 +63,25 @@ class FakePage:
         self,
         text: str,
         *,
+        layout_text: str | None = None,
         contents: bytes = b"",
         on_extract: Callable[[], None] | None = None,
     ) -> None:
         self.text = text
+        self.layout_text = layout_text if layout_text is not None else text
         self.contents = contents
         self.on_extract = on_extract
+        self.extract_calls: list[dict[str, object]] = []
 
     def get_contents(self) -> FakeContents | None:
         return FakeContents(self.contents) if self.contents else None
 
-    def extract_text(self) -> str:
+    def extract_text(self, **kwargs: object) -> str:
+        self.extract_calls.append(kwargs)
         if self.on_extract is not None:
             self.on_extract()
+        if kwargs.get("extraction_mode") == "layout":
+            return self.layout_text
         return self.text
 
 
@@ -150,6 +156,38 @@ def test_extracts_pages_in_order_and_returns_typed_metadata() -> None:
     assert result.page_count == 3
     assert result.character_count == len(result.cleaned_text)
     assert result.sha256 == hashlib.sha256(pdf_bytes).hexdigest()
+
+
+def test_uses_layout_extraction_to_preserve_cross_page_project_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first_page = FakePage(
+        "PROJECT EXPERIENCE\nProject A\nProject B\nPLAIN WRONG ORDER",
+        layout_text="PROJECT EXPERIENCE\nProject A\nDescription A\nHighlight A\nProject B",
+    )
+    second_page = FakePage(
+        "Highlight B\nProject C",
+        layout_text="Description B\nHighlight B\nProject C",
+    )
+    install_fake_reader(monkeypatch, [first_page, second_page])
+
+    result = parse_pdf(
+        b"%PDF-layout-regression",
+        filename="resume.pdf",
+        content_type="application/pdf",
+    )
+
+    assert result.cleaned_text == (
+        "PROJECT EXPERIENCE\nProject A\nDescription A\nHighlight A\nProject B"
+        "\n\nDescription B\nHighlight B\nProject C"
+    )
+    expected_call = {
+        "extraction_mode": "layout",
+        "layout_mode_space_vertically": False,
+        "layout_mode_strip_rotated": False,
+    }
+    assert first_page.extract_calls == [expected_call]
+    assert second_page.extract_calls == [expected_call]
 
 
 def test_uses_strict_reader_mode(monkeypatch: pytest.MonkeyPatch) -> None:

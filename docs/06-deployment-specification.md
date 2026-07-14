@@ -87,7 +87,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 9000
 | 运行方式 | Web Function + Custom Container |
 | 镜像架构 | `linux/amd64` |
 | CAPort | 9000，与容器监听一致 |
-| 超时时间 | 至少覆盖 PDF 解析、两次 AI 调用预算和响应序列化 |
+| 超时时间 | 函数至少 120 秒；复杂简历生产基线使用 `AI_TIMEOUT_SECONDS=60`，并覆盖 PDF 解析和响应序列化 |
 | 内存 | 根据 pypdf、50 MiB 内容流预算和最大 10 MB PDF 的实测结果设置 |
 | 临时磁盘 | 只用于请求生命周期临时文件，不依赖持久化 |
 | 环境变量 | 按工程规范配置，不写入镜像 |

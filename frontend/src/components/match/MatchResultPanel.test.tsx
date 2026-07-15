@@ -18,8 +18,15 @@ describe('MatchResultPanel', () => {
     expect(screen.getByText('已匹配：Python')).toBeInTheDocument()
     expect(screen.getByText('待补充：Serverless')).toBeInTheDocument()
     expect(screen.getByRole('listitem')).toHaveTextContent('负责简历解析与匹配服务')
-    expect(screen.getByText('已覆盖职责')).toBeInTheDocument()
-    expect(screen.getByText('已匹配：后端开发')).toBeInTheDocument()
+    expect(screen.getByText('规则已识别职责')).toBeInTheDocument()
+    expect(screen.getByText('规则未检出职责证据')).toBeInTheDocument()
+    expect(screen.getByText('已识别：后端开发')).toBeInTheDocument()
+    expect(screen.getByText('未检出：接口开发')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        '技能和职责标签根据简历原文规则识别；经历相关性分数由 AI 结合原文证据评估。',
+      ),
+    ).toBeInTheDocument()
     expect(screen.getByText('AI + 规则综合评分')).toBeInTheDocument()
     expect(screen.queryByText('AI 经历精评未完成')).not.toBeInTheDocument()
   })

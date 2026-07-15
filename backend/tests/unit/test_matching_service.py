@@ -77,6 +77,38 @@ def test_resume_aliases_use_boundaries_and_canonical_matching() -> None:
     assert result.experience_score == 100
 
 
+def test_resume_responsibility_aliases_match_explicit_frontend_evidence() -> None:
+    keywords = JdKeywords(
+        skills=(),
+        responsibilities=(
+            "Frontend Development",
+            "Performance Optimization",
+            "Team Collaboration",
+        ),
+    )
+    result = score_deterministic_match(
+        keywords,
+        "担任前端项目负责人，负责 Web 端框架搭建和页面开发。"
+        "基于 Vue 和 Vite 优化构建速度，推动团队协作并进行代码审核。",
+    )
+    assert result.matched_responsibilities == keywords.responsibilities
+    assert result.missing_responsibilities == ()
+    assert result.experience_score == 100
+
+
+def test_frontend_collaboration_does_not_imply_frontend_development() -> None:
+    keywords = JdKeywords(
+        skills=(),
+        responsibilities=("Frontend Development", "Team Collaboration"),
+    )
+    result = score_deterministic_match(
+        keywords,
+        "负责后端接口开发，与前端团队协作完成联调。",
+    )
+    assert result.matched_responsibilities == ("Team Collaboration",)
+    assert result.missing_responsibilities == ("Frontend Development",)
+
+
 @pytest.mark.asyncio
 async def test_valid_ai_result_builds_hybrid_decision() -> None:
     keywords = JdKeywords(skills=("Python", "Redis"), responsibilities=("Backend Development",))

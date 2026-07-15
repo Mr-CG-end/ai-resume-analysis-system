@@ -92,7 +92,7 @@ def test_versioned_cache_keys_follow_documented_format() -> None:
     assert build_extract_cache_key(pdf_hash) == f"extract:{pdf_hash}:pdf-v2-profile-v4"
     assert build_extract_cache_key(pdf_hash, "profile-v2") == (f"extract:{pdf_hash}:profile-v2")
     assert build_match_cache_key(resume_hash, jd_hash) == (
-        f"match:{resume_hash}:{jd_hash}:score-v1-match-v2"
+        f"match:{resume_hash}:{jd_hash}:score-v2-match-v2"
     )
 
 

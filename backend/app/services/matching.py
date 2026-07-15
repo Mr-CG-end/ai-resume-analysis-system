@@ -7,7 +7,7 @@ from typing import Literal, Protocol
 from app.schemas.ai_match import AiExperiencePayload
 from app.services.ai_match import AiMatchingError
 from app.services.jd import (
-    RESPONSIBILITY_ALIASES,
+    RESUME_RESPONSIBILITY_ALIASES,
     SKILL_ALIASES,
     JdKeywords,
     extract_catalog_keywords,
@@ -60,7 +60,9 @@ def score_deterministic_match(
 ) -> DeterministicMatch:
     """Score only evidence found in cleaned resume text."""
     resume_skills = set(extract_catalog_keywords(cleaned_text, SKILL_ALIASES))
-    resume_responsibilities = set(extract_catalog_keywords(cleaned_text, RESPONSIBILITY_ALIASES))
+    resume_responsibilities = set(
+        extract_catalog_keywords(cleaned_text, RESUME_RESPONSIBILITY_ALIASES)
+    )
     matched_keywords = tuple(skill for skill in keywords.skills if skill in resume_skills)
     missing_keywords = tuple(skill for skill in keywords.skills if skill not in resume_skills)
     matched_responsibilities = tuple(

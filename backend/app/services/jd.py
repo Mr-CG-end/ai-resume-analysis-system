@@ -51,6 +51,38 @@ RESPONSIBILITY_ALIASES: dict[str, tuple[str, ...]] = {
     "Project Management": ("project management", "项目管理"),
 }
 
+RESUME_RESPONSIBILITY_ALIASES: dict[str, tuple[str, ...]] = {
+    **RESPONSIBILITY_ALIASES,
+    "Frontend Development": (
+        *RESPONSIBILITY_ALIASES["Frontend Development"],
+        "前端工程师",
+        "前端实习生",
+        "前端负责人",
+        "前端项目负责人",
+        "web端开发",
+        "web 端开发",
+        "web端框架",
+        "web 端框架",
+        "页面开发",
+    ),
+    "Performance Optimization": (
+        *RESPONSIBILITY_ALIASES["Performance Optimization"],
+        "构建工具优化",
+        "优化构建速度",
+        "性能提升",
+        "首屏优化",
+        "加载优化",
+        "渲染优化",
+    ),
+    "Team Collaboration": (
+        *RESPONSIBILITY_ALIASES["Team Collaboration"],
+        "跨团队协作",
+        "分配任务",
+        "代码审核",
+        "协作流程",
+    ),
+}
+
 RESPONSIBILITY_LABELS: dict[str, str] = {
     "Backend Development": "后端开发",
     "Frontend Development": "前端开发",

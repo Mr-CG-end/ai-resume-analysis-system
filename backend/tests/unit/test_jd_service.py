@@ -48,6 +48,12 @@ def test_extracts_common_frontend_tooling_and_vue3_alias() -> None:
     assert parsed.responsibilities == ("Frontend Development",)
 
 
+def test_resume_only_responsibility_aliases_do_not_expand_jd_requirements() -> None:
+    parsed = extract_jd_keywords("招聘 React 工程师，需要候选人曾经担任前端项目负责人并交付项目。")
+    assert parsed.skills == ("React",)
+    assert parsed.responsibilities == ()
+
+
 def test_nfkc_is_applied_and_internal_whitespace_is_preserved() -> None:
     parsed = extract_jd_keywords("需要 Ｐｙｔｈｏｎ 工程师\n负责系统设计与团队协作。")
     assert parsed.normalized_text == "需要 Python 工程师\n负责系统设计与团队协作。"

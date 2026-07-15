@@ -11,9 +11,11 @@ interface KeywordGroupProps {
   title: string
   keywords: string[]
   tone: 'matched' | 'missing'
+  tagPrefix?: string
 }
 
-function KeywordGroup({ title, keywords, tone }: KeywordGroupProps) {
+function KeywordGroup({ title, keywords, tone, tagPrefix }: KeywordGroupProps) {
+  const prefix = tagPrefix ?? (tone === 'matched' ? '已匹配：' : '待补充：')
   return (
     <section className={styles.keywordGroup} aria-label={title}>
       <h3>{title}</h3>
@@ -23,7 +25,7 @@ function KeywordGroup({ title, keywords, tone }: KeywordGroupProps) {
         ) : (
           keywords.map((keyword) => (
             <Tag key={keyword} color={tone === 'matched' ? 'success' : 'default'}>
-              {tone === 'matched' ? '已匹配：' : '待补充：'}{keyword}
+              {prefix}{keyword}
             </Tag>
           ))
         )}
@@ -88,11 +90,24 @@ export function MatchResultPanel({ result, onReset }: MatchResultPanelProps) {
 
       <section aria-labelledby="keyword-analysis-title">
         <h3 id="keyword-analysis-title" className={styles.sectionTitle}>岗位关键词分析</h3>
+        <p className={styles.keywordNote}>
+          技能和职责标签根据简历原文规则识别；经历相关性分数由 AI 结合原文证据评估。
+        </p>
         <div className={styles.keywordGrid}>
           <KeywordGroup title="已匹配技能" keywords={result.matched_keywords} tone="matched" />
           <KeywordGroup title="待补充技能" keywords={result.missing_keywords} tone="missing" />
-          <KeywordGroup title="已覆盖职责" keywords={result.matched_responsibilities} tone="matched" />
-          <KeywordGroup title="待补充职责" keywords={result.missing_responsibilities} tone="missing" />
+          <KeywordGroup
+            title="规则已识别职责"
+            keywords={result.matched_responsibilities}
+            tone="matched"
+            tagPrefix="已识别："
+          />
+          <KeywordGroup
+            title="规则未检出职责证据"
+            keywords={result.missing_responsibilities}
+            tone="missing"
+            tagPrefix="未检出："
+          />
         </div>
       </section>
 

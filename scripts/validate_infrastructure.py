@@ -56,8 +56,8 @@ def _validate_compose(compose: str, errors: list[str]) -> None:
     healthcheck = _mapping(redis.get("healthcheck"))
     if healthcheck is None or not healthcheck.get("test"):
         errors.append("docker-compose.yml must define a Redis health check command")
-    if redis.get("ports") != ["127.0.0.1:6379:6379"]:
-        errors.append("docker-compose.yml must publish Redis only on 127.0.0.1:6379")
+    if redis.get("ports") != ["127.0.0.1:16379:6379"]:
+        errors.append("docker-compose.yml must publish Redis only on 127.0.0.1:16379")
     if "volumes" in redis or "volumes" in document:
         errors.append("docker-compose.yml must not configure persistent Redis volumes")
 

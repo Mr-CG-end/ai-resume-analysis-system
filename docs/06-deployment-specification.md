@@ -12,7 +12,7 @@
 flowchart LR
     B["浏览器"] --> V["Vite :5173"]
     V --> F["FastAPI :8000"]
-    F -.-> R["Redis :6379 / Docker"]
+    F -.-> R["Redis :16379 / Docker"]
     F --> A["AI API"]
 ```
 
@@ -47,7 +47,7 @@ Copy-Item .env.example .env
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-真实 AI 提取需要同时配置 `AI_API_KEY`、`AI_BASE_URL` 和 `AI_MODEL`；任一缺失时健康检查返回 503，但简历上传仍以规则档案降级返回。所选模型端点需要支持 OpenAI 兼容的 JSON 模式；档案提取关闭扩展思考，并将 `AI_TIMEOUT_SECONDS` 作为两次尝试共享的总预算。Redis 启用时增加 `REDIS_URL=redis://localhost:6379/0`。`CORS_ORIGINS` 使用逗号分隔的精确来源，默认仅 `http://localhost:5173`；空来源和通配符 `*` 会被拒绝，生产环境需加入 GitHub Pages 来源。
+真实 AI 提取需要同时配置 `AI_API_KEY`、`AI_BASE_URL` 和 `AI_MODEL`；任一缺失时健康检查返回 503，但简历上传仍以规则档案降级返回。所选模型端点需要支持 OpenAI 兼容的 JSON 模式；档案提取关闭扩展思考，并将 `AI_TIMEOUT_SECONDS` 作为两次尝试共享的总预算。Redis 启用时增加 `REDIS_URL=redis://127.0.0.1:16379/0`；宿主机使用 16379 避免部分 Windows 环境保留 6379 所在端口段，容器内部仍监听标准 6379。显式使用 IPv4 回环地址可避免 Windows 将 `localhost` 优先解析到未监听的 IPv6 地址。`CORS_ORIGINS` 使用逗号分隔的精确来源，默认仅 `http://localhost:5173`；空来源和通配符 `*` 会被拒绝，生产环境需加入 GitHub Pages 来源。
 
 ### 前端
 

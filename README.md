@@ -17,6 +17,8 @@ docker compose up -d redis
 docker compose ps
 ```
 
+Compose 将宿主机 `127.0.0.1:16379` 映射到容器内 Redis 的标准端口 6379；启用缓存时在 `backend/.env` 配置 `REDIS_URL=redis://127.0.0.1:16379/0`。
+
 后端在本机运行：
 
 ```powershell

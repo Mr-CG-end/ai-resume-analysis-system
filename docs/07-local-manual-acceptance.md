@@ -33,7 +33,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
-# 如已启动 Redis，取消 .env 中 REDIS_URL 的注释。
+# 如已启动 Redis，取消 .env 中 REDIS_URL=redis://127.0.0.1:16379/0 的注释。
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 

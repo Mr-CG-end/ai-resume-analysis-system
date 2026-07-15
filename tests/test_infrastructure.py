@@ -147,7 +147,7 @@ def test_pages_uses_current_stable_action_major_versions() -> None:
 
 def test_redis_port_is_bound_to_loopback() -> None:
     document = _load_yaml("docker-compose.yml")
-    assert document["services"]["redis"]["ports"] == ["127.0.0.1:6379:6379"]
+    assert document["services"]["redis"]["ports"] == ["127.0.0.1:16379:6379"]
 
 
 def test_python_and_production_lock_contract_are_exact() -> None:
@@ -374,7 +374,7 @@ def test_rejects_persistent_redis_volume(repository_copy: Path) -> None:
 def test_rejects_wildcard_redis_port_publication(repository_copy: Path) -> None:
     path = repository_copy / "docker-compose.yml"
     contents = path.read_text(encoding="utf-8")
-    contents = contents.replace("127.0.0.1:6379:6379", "0.0.0.0:6379:6379")
+    contents = contents.replace("127.0.0.1:16379:6379", "0.0.0.0:16379:6379")
     path.write_text(contents, encoding="utf-8")
 
     assert validate_repository(repository_copy)

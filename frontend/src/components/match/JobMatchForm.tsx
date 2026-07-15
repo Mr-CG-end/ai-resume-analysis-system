@@ -30,6 +30,7 @@ export function JobMatchForm({
   submitting = false,
   hasSnapshot,
 }: JobMatchFormProps) {
+  const [hasEdited, setHasEdited] = useState(false)
   const [showValidation, setShowValidation] = useState(false)
   const trimmedLength = jobDescription.trim().length
   const error = validationMessage(trimmedLength)
@@ -70,8 +71,13 @@ export function JobMatchForm({
           <Input.TextArea
             id="job-description"
             value={jobDescription}
-            onChange={(event) => onJobDescriptionChange(event.target.value)}
-            onBlur={() => setShowValidation(true)}
+            onChange={(event) => {
+              setHasEdited(true)
+              onJobDescriptionChange(event.target.value)
+            }}
+            onBlur={() => {
+              if (hasEdited || trimmedLength > 0) setShowValidation(true)
+            }}
             disabled={disabled || submitting}
             rows={7}
             placeholder="例如：招聘 Python 后端工程师，需要 FastAPI、Redis 和 RESTful API 项目经验。"

@@ -45,7 +45,6 @@ function renderForm(
 
 describe('JobMatchForm', () => {
   it.each([
-    ['', '岗位描述至少需要 20 个字符'],
     ['x'.repeat(19), '岗位描述至少需要 20 个字符'],
     [`  ${'x'.repeat(19)}  `, '岗位描述至少需要 20 个字符'],
     ['x'.repeat(10_001), '岗位描述不能超过 10,000 个字符'],
@@ -64,6 +63,31 @@ describe('JobMatchForm', () => {
     expect(props.onSubmit).not.toHaveBeenCalled()
   })
 
+
+  it('初始空白岗位描述失焦时不提前显示错误，编辑后才提示', () => {
+    const props: React.ComponentProps<typeof JobMatchForm> = {
+      jobDescription: '',
+      onJobDescriptionChange: vi.fn(),
+      onSubmit: vi.fn(),
+      onReset: vi.fn(),
+      hasSnapshot: true,
+    }
+    const { rerender } = render(<JobMatchForm {...props} />)
+    const textarea = screen.getByRole('textbox', { name: '岗位描述' })
+
+    fireEvent.blur(textarea)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(textarea).toHaveAttribute('aria-invalid', 'false')
+
+    fireEvent.change(textarea, { target: { value: 'x' } })
+    rerender(<JobMatchForm {...props} jobDescription="x" />)
+    fireEvent.blur(textarea)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      '岗位描述至少需要 20 个字符',
+    )
+    expect(textarea).toHaveAttribute('aria-invalid', 'true')
+  })
   it.each(['x'.repeat(20), `  ${'x'.repeat(20)}  `, 'x'.repeat(10_000)])(
     '允许有效 JD 边界提交',
     (jobDescription) => {
@@ -83,7 +107,7 @@ describe('JobMatchForm', () => {
 
   it('岗位描述修正后清除已展示的校验错误', () => {
     const props: React.ComponentProps<typeof JobMatchForm> = {
-      jobDescription: '',
+      jobDescription: 'x',
       onJobDescriptionChange: vi.fn(),
       onSubmit: vi.fn(),
       onReset: vi.fn(),

@@ -95,6 +95,15 @@
   font-size: 12px;
 }
 
+.lazyFallback {
+  padding: 20px;
+  border: 1px solid #d7dfdc;
+  border-radius: 18px;
+  color: #5f6e69;
+  text-align: center;
+  background: #fff;
+}
+
 .footerNote {
   display: flex;
   align-items: center;

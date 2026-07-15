@@ -1,12 +1,26 @@
 import { Alert, Button, Steps, Tag } from 'antd'
-import { useEffect, useReducer, useRef } from 'react'
+import { lazy, Suspense, useEffect, useReducer, useRef } from 'react'
 import { ApiError, createMatch, createResume } from '../../api/client'
 import type { MatchResponse, ResumeSnapshot } from '../../api/types'
-import { JobMatchForm, MatchResultPanel } from '../../components/match'
-import { CandidateProfilePanel } from '../resume/CandidateProfilePanel'
 import { ResumeUpload } from '../resume/ResumeUpload'
 import type { UploadValidationError } from '../resume/resumeValidation'
 import styles from './ResumeAnalysisPage.module.css'
+
+const CandidateProfilePanel = lazy(() =>
+  import('../resume/CandidateProfilePanel').then((module) => ({
+    default: module.CandidateProfilePanel,
+  })),
+)
+const JobMatchForm = lazy(() =>
+  import('../../components/match/JobMatchForm').then((module) => ({
+    default: module.JobMatchForm,
+  })),
+)
+const MatchResultPanel = lazy(() =>
+  import('../../components/match/MatchResultPanel').then((module) => ({
+    default: module.MatchResultPanel,
+  })),
+)
 
 type WorkflowStatus = 'idle' | 'parsing' | 'ready' | 'matching'
 
@@ -265,21 +279,29 @@ export function ResumeAnalysisPage() {
             }
           />
 
-          {state.snapshot && <CandidateProfilePanel snapshot={state.snapshot} />}
+          <Suspense
+            fallback={
+              <div className={styles.lazyFallback} role="status" aria-live="polite">
+                正在加载分析界面…
+              </div>
+            }
+          >
+            {state.snapshot && <CandidateProfilePanel snapshot={state.snapshot} />}
 
-          {state.snapshot && (
-            <JobMatchForm
-              jobDescription={state.jobDescription}
-              onJobDescriptionChange={(value) => dispatch({ type: 'job', value })}
-              onSubmit={() => void matchResume()}
-              onReset={reset}
-              disabled={state.status === 'parsing'}
-              submitting={state.status === 'matching'}
-              hasSnapshot
-            />
-          )}
+            {state.snapshot && (
+              <JobMatchForm
+                jobDescription={state.jobDescription}
+                onJobDescriptionChange={(value) => dispatch({ type: 'job', value })}
+                onSubmit={() => void matchResume()}
+                onReset={reset}
+                disabled={state.status === 'parsing'}
+                submitting={state.status === 'matching'}
+                hasSnapshot
+              />
+            )}
 
-          {state.result && <MatchResultPanel result={state.result} onReset={reset} />}
+            {state.result && <MatchResultPanel result={state.result} onReset={reset} />}
+          </Suspense>
 
           {(state.snapshot?.degraded || state.result?.degraded) && (
             <div className={styles.footerNote}>

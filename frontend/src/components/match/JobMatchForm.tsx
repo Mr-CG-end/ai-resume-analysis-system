@@ -1,5 +1,5 @@
 import { Button, Form, Input } from 'antd'
-import type { FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import styles from './JobMatchForm.module.css'
 
 const MIN_JD_LENGTH = 20
@@ -30,11 +30,17 @@ export function JobMatchForm({
   submitting = false,
   hasSnapshot,
 }: JobMatchFormProps) {
+  const [showValidation, setShowValidation] = useState(false)
   const trimmedLength = jobDescription.trim().length
   const error = validationMessage(trimmedLength)
+  const visibleError = showValidation ? error : undefined
   const cannotSubmit = disabled || submitting || !hasSnapshot || Boolean(error)
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (error) {
+      setShowValidation(true)
+      return
+    }
     if (!cannotSubmit) onSubmit()
   }
 
@@ -58,25 +64,26 @@ export function JobMatchForm({
         <Form.Item
           label="岗位描述"
           htmlFor="job-description"
-          validateStatus={error ? 'error' : undefined}
-          help={error ? <span role="alert">{error}</span> : undefined}
+          validateStatus={visibleError ? 'error' : undefined}
+          help={visibleError ? <span role="alert">{visibleError}</span> : undefined}
         >
           <Input.TextArea
             id="job-description"
             value={jobDescription}
             onChange={(event) => onJobDescriptionChange(event.target.value)}
+            onBlur={() => setShowValidation(true)}
             disabled={disabled || submitting}
             rows={7}
             placeholder="例如：招聘 Python 后端工程师，需要 FastAPI、Redis 和 RESTful API 项目经验。"
             aria-describedby="job-description-help"
-            aria-invalid={Boolean(error)}
+            aria-invalid={Boolean(visibleError)}
             aria-label="岗位描述"
           />
         </Form.Item>
 
         <div id="job-description-help" className={styles.helpRow}>
           <span>请粘贴 20–10,000 个字符的完整岗位描述。</span>
-          <span className={error ? styles.countError : undefined}>
+          <span className={visibleError ? styles.countError : undefined}>
             {trimmedLength.toLocaleString('zh-CN')} / 10,000
           </span>
         </div>

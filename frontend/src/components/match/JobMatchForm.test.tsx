@@ -51,7 +51,14 @@ describe('JobMatchForm', () => {
     ['x'.repeat(10_001), '岗位描述不能超过 10,000 个字符'],
   ])('拒绝无效 JD 边界', (jobDescription, message) => {
     const props = renderForm({ jobDescription })
+    const textarea = screen.getByRole('textbox', { name: '岗位描述' })
+
+    expect(textarea).toHaveAttribute('aria-invalid', 'false')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    fireEvent.blur(textarea)
     expect(screen.getByRole('alert')).toHaveTextContent(message)
+    expect(textarea).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByRole('button', { name: '开始匹配' })).toBeDisabled()
     fireEvent.submit(screen.getByRole('button', { name: '开始匹配' }).closest('form')!)
     expect(props.onSubmit).not.toHaveBeenCalled()
@@ -72,6 +79,25 @@ describe('JobMatchForm', () => {
       target: { value: '新的岗位描述' },
     })
     expect(props.onJobDescriptionChange).toHaveBeenCalledWith('新的岗位描述')
+  })
+
+  it('岗位描述修正后清除已展示的校验错误', () => {
+    const props: React.ComponentProps<typeof JobMatchForm> = {
+      jobDescription: '',
+      onJobDescriptionChange: vi.fn(),
+      onSubmit: vi.fn(),
+      onReset: vi.fn(),
+      hasSnapshot: true,
+    }
+    const { rerender } = render(<JobMatchForm {...props} />)
+    const textarea = screen.getByRole('textbox', { name: '岗位描述' })
+
+    fireEvent.blur(textarea)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    rerender(<JobMatchForm {...props} jobDescription={validDescription} />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(textarea).toHaveAttribute('aria-invalid', 'false')
   })
 
   it('无快照或禁用时不允许提交', () => {

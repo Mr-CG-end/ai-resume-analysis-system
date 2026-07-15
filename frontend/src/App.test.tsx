@@ -90,6 +90,11 @@ describe('完整简历分析流程', () => {
     expect(await screen.findByRole('heading', { name: '候选人档案' })).toBeVisible()
     expect(screen.getByText('张三')).toBeVisible()
     expect(apiMocks.createResume).toHaveBeenCalledOnce()
+    expect(screen.getByRole('textbox', { name: '岗位描述' })).toHaveAttribute(
+      'aria-invalid',
+      'false',
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByRole('textbox', { name: '岗位描述' }), {
       target: { value: '  招聘 Python 后端工程师，需要 Redis 和 API 项目经验。\n' },
